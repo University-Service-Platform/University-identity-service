@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from app.database import engine, Base
 from app.routes.validation import router as validation_router
 from app.routes.health import router as health_router
+from app.routes.protected_example import router as protected_example_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -43,3 +44,4 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
 
 app.include_router(health_router)
 app.include_router(validation_router)
+app.include_router(protected_example_router)
