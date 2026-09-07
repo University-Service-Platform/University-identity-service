@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
-from typing import Optional
+from typing import Optional, List, Union
 
 from app.database import get_db
 from app.models.user import User, AccountStatus
@@ -104,3 +104,42 @@ def require_active_account(
             }
         )
     return current_user
+
+class RoleChecker:
+    """
+    USM-59 / USM-84 Reusable Role-Based Authorization Dependency.
+    Checks whether the current active user possesses any of the required allowed roles.
+    Never trusts client-supplied roles. Queries trusted Identity DB roles dynamically.
+    """
+    def __init__(self, allowed_roles: List[str]):
+        self.allowed_roles = [r.upper() for r in allowed_roles]
+
+    def __call__(
+        self,
+        current_user: User = Depends(require_active_account),
+        db: Session = Depends(get_db)
+    ) -> User:
+        repository = UserRepository(db)
+        user_roles = [r.upper() for r in repository.get_user_roles(current_user.id)]
+        
+        # Fallback to account_type if no explicit UserRole entity exists yet
+        if not user_roles:
+            user_roles = [current_user.account_type.value.upper()]
+
+        # Check if user has any of the allowed roles
+        has_permission = any(role in self.allowed_roles for role in user_roles)
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "INSUFFICIENT_PERMISSIONS",
+                        "message": f"User does not have required role permissions: {self.allowed_roles}"
+                    }
+                }
+            )
+        return current_user
+
+def require_roles(allowed_roles: List[str]):
+    return RoleChecker(allowed_roles)
