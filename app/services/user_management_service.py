@@ -183,6 +183,40 @@ class UserManagementService:
         updated_user = self.repository.update(user)
         return self._format_user_response(updated_user)
 
+    def update_user_status(self, user_id: str, new_status: AccountStatus) -> UserResponse:
+        if not self.validate_identifier_format(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "INVALID_IDENTIFIER_FORMAT",
+                        "message": f"User identifier '{user_id}' has an invalid format."
+                    }
+                }
+            )
+
+        user = self.repository.get_by_id(user_id)
+        if not user:
+            user = self.repository.get_by_university_id(user_id)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "USER_NOT_FOUND",
+                        "message": f"User with identifier '{user_id}' was not found."
+                    }
+                }
+            )
+
+        user.status = new_status
+        user.updated_at = datetime.utcnow()
+        updated_user = self.repository.update(user)
+        return self._format_user_response(updated_user)
+
     def delete_user(self, user_id: str) -> None:
         if not self.validate_identifier_format(user_id):
             raise HTTPException(

@@ -17,6 +17,9 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = Field(None, description="Updated University Email")
     account_type: Optional[AccountType] = Field(None, description="Updated Account Type")
 
+class UserStatusUpdate(BaseModel):
+    status: AccountStatus = Field(..., description="Target account status: ACTIVE or INACTIVE")
+
 class UserResponse(UserBase):
     id: str
     status: AccountStatus

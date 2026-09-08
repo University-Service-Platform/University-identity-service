@@ -2,6 +2,7 @@ from app.schemas.user import (
     UserBase,
     UserCreate,
     UserUpdate,
+    UserStatusUpdate,
     UserResponse,
     UserSingleResponse,
     UserListResponse
@@ -14,6 +15,7 @@ __all__ = [
     "UserBase",
     "UserCreate",
     "UserUpdate",
+    "UserStatusUpdate",
     "UserResponse",
     "UserSingleResponse",
     "UserListResponse",

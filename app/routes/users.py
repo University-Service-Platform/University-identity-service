@@ -7,6 +7,7 @@ from app.schemas.profile import UserProfileResponse
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
+    UserStatusUpdate,
     UserSingleResponse,
     UserListResponse
 )
@@ -79,6 +80,23 @@ def update_user(
 ):
     service = UserManagementService(db)
     updated_user = service.update_user(user_id=user_id, user_update=user_update)
+    return UserSingleResponse(success=True, data=updated_user)
+
+@router.patch(
+    "/users/{user_id}/status",
+    response_model=UserSingleResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update User Account Status",
+    description="Activate or deactivate a user account. Accessible by authorized administrators."
+)
+def update_user_status(
+    user_id: str,
+    status_in: UserStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["ADMIN"]))
+):
+    service = UserManagementService(db)
+    updated_user = service.update_user_status(user_id=user_id, new_status=status_in.status)
     return UserSingleResponse(success=True, data=updated_user)
 
 @router.delete(
