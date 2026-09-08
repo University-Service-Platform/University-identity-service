@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.role_identification_service import RoleIdentificationService
-from app.schemas.role import UserRoleIdentificationResponse
-from app.dependencies.auth import require_active_account
+from app.services.role_assignment_service import RoleAssignmentService
+from app.schemas.role import (
+    UserRoleIdentificationResponse,
+    UserRoleAssignRequest,
+    UserRoleAssignmentResponse
+)
+from app.dependencies.auth import require_active_account, RoleChecker
 from app.models.user import User
 
-router = APIRouter(tags=["Role Identification"])
+router = APIRouter(tags=["Role Management & Identification"])
 
 @router.get(
     "/users/{user_id}/role",
@@ -23,3 +28,37 @@ def get_user_role(
     service = RoleIdentificationService(db)
     role_data = service.get_user_role(user_id=user_id)
     return UserRoleIdentificationResponse(success=True, data=role_data)
+
+@router.post(
+    "/users/{user_id}/roles",
+    response_model=UserRoleAssignmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Assign Role to User",
+    description="Assign an existing system role to a user account. Accessible by authorized administrators."
+)
+def assign_user_role(
+    user_id: str,
+    role_in: UserRoleAssignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["ADMIN"]))
+):
+    service = RoleAssignmentService(db)
+    assignment_data = service.assign_role(user_id=user_id, role_name=role_in.role_name)
+    return UserRoleAssignmentResponse(success=True, data=assignment_data)
+
+@router.delete(
+    "/users/{user_id}/roles/{role_name}",
+    response_model=UserRoleAssignmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Revoke Role from User",
+    description="Revoke an assigned system role from a user account. Accessible by authorized administrators."
+)
+def revoke_user_role(
+    user_id: str,
+    role_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["ADMIN"]))
+):
+    service = RoleAssignmentService(db)
+    revocation_data = service.revoke_role(user_id=user_id, role_name=role_name)
+    return UserRoleAssignmentResponse(success=True, data=revocation_data)

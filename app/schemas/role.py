@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 from app.models.user import AccountType
 
@@ -20,3 +20,18 @@ class UserRoleData(BaseModel):
 class UserRoleIdentificationResponse(BaseModel):
     success: bool = True
     data: UserRoleData
+
+class UserRoleAssignRequest(BaseModel):
+    role_name: str = Field(..., min_length=2, max_length=50, description="Role name to assign (e.g. ADMIN, STAFF, DEAN)")
+
+class UserRoleAssignmentData(BaseModel):
+    user_id: str
+    university_id: str
+    name: str
+    roles: List[str]
+    primary_role: str
+    message: str
+
+class UserRoleAssignmentResponse(BaseModel):
+    success: bool = True
+    data: UserRoleAssignmentData
