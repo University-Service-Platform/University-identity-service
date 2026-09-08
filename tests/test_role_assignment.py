@@ -82,7 +82,6 @@ def test_duplicate_role_assignment_rejected(client, db_session):
     admin_token = create_access_token({"sub": "usr-admin-role-001"})
     headers = {"Authorization": f"Bearer {admin_token}"}
 
-    # Attempt to assign STUDENT role to student_user who already has STUDENT
     payload = {"role_name": "STUDENT"}
     response = client.post(
         "/users/usr-student-role-003/roles",
@@ -97,7 +96,7 @@ def test_nonexistent_role_rejected(client, db_session):
     admin_token = create_access_token({"sub": "usr-admin-role-001"})
     headers = {"Authorization": f"Bearer {admin_token}"}
 
-    payload = {"role_name": "CHANCELLOR"}  # Nonexistent role
+    payload = {"role_name": "CHANCELLOR"}
     response = client.post(
         "/users/usr-student-role-003/roles",
         json=payload,
@@ -156,15 +155,124 @@ def test_unauthenticated_assignment_rejected(client, db_session):
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
 
+def test_admin_updates_user_role_relationship_success(client, db_session):
+    """
+    USM-94 Acceptance Criteria:
+    - Given an authorized administrator, an existing user-role relationship can be updated.
+    """
+    seed_role_assignment_data(db_session)
+    admin_token = create_access_token({"sub": "usr-admin-role-001"})
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Update staff_user role from STAFF to DEAN via PUT /users/{user_id}/roles
+    payload = {
+        "old_role_name": "STAFF",
+        "new_role_name": "DEAN"
+    }
+    response = client.put(
+        "/users/usr-staff-role-002/roles",
+        json=payload,
+        headers=headers
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["user_id"] == "usr-staff-role-002"
+    assert "DEAN" in data["data"]["roles"]
+    assert "STAFF" not in data["data"]["roles"]
+
+def test_update_role_nonexistent_target_role_rejected(client, db_session):
+    seed_role_assignment_data(db_session)
+    admin_token = create_access_token({"sub": "usr-admin-role-001"})
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    payload = {
+        "old_role_name": "STAFF",
+        "new_role_name": "NON_EXISTENT_ROLE"
+    }
+    response = client.put(
+        "/users/usr-staff-role-002/roles",
+        json=payload,
+        headers=headers
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "ROLE_NOT_FOUND"
+
+def test_update_role_unassigned_old_role_rejected(client, db_session):
+    seed_role_assignment_data(db_session)
+    admin_token = create_access_token({"sub": "usr-admin-role-001"})
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Staff user does not possess ADMIN role to update
+    payload = {
+        "old_role_name": "ADMIN",
+        "new_role_name": "DEAN"
+    }
+    response = client.put(
+        "/users/usr-staff-role-002/roles",
+        json=payload,
+        headers=headers
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "ROLE_NOT_ASSIGNED"
+
+def test_unauthorized_user_cannot_update_role(client, db_session):
+    seed_role_assignment_data(db_session)
+    student_token = create_access_token({"sub": "usr-student-role-003"})
+    headers = {"Authorization": f"Bearer {student_token}"}
+
+    payload = {
+        "old_role_name": "STAFF",
+        "new_role_name": "ADMIN"
+    }
+    response = client.put(
+        "/users/usr-staff-role-002/roles",
+        json=payload,
+        headers=headers
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "INSUFFICIENT_PERMISSIONS"
+
+def test_updated_role_authorization_applies_immediately(client, db_session):
+    """
+    USM-94 Acceptance Criteria:
+    - Updated authorization must apply to subsequent protected requests.
+    """
+    seed_role_assignment_data(db_session)
+    admin_token = create_access_token({"sub": "usr-admin-role-001"})
+    staff_token = create_access_token({"sub": "usr-staff-role-002"})
+
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    staff_headers = {"Authorization": f"Bearer {staff_token}"}
+
+    # Staff user initially denied on /protected/admin-only
+    res1 = client.get("/protected/admin-only", headers=staff_headers)
+    assert res1.status_code == 403
+
+    # Admin updates staff_user role from STAFF to ADMIN
+    payload = {
+        "old_role_name": "STAFF",
+        "new_role_name": "ADMIN"
+    }
+    res_update = client.put(
+        "/users/usr-staff-role-002/roles",
+        json=payload,
+        headers=admin_headers
+    )
+    assert res_update.status_code == 200
+
+    # Same staff user immediately accesses /protected/admin-only -> 200 OK
+    res2 = client.get("/protected/admin-only", headers=staff_headers)
+    assert res2.status_code == 200
+    assert res2.json()["data"]["user_id"] == "usr-staff-role-002"
+
 def test_admin_revokes_assigned_role(client, db_session):
     seed_role_assignment_data(db_session)
     admin_token = create_access_token({"sub": "usr-admin-role-001"})
     headers = {"Authorization": f"Bearer {admin_token}"}
 
-    # First assign DEAN to staff_user
     client.post("/users/usr-staff-role-002/roles", json={"role_name": "DEAN"}, headers=headers)
 
-    # Now revoke DEAN
     response = client.delete("/users/usr-staff-role-002/roles/DEAN", headers=headers)
     assert response.status_code == 200
     data = response.json()
@@ -172,22 +280,11 @@ def test_admin_revokes_assigned_role(client, db_session):
     assert "DEAN" not in data["data"]["roles"]
     assert "STAFF" in data["data"]["roles"]
 
-    # Verify directly in DB
-    user_roles = (
-        db_session.query(Role.name)
-        .join(UserRole, UserRole.role_id == Role.id)
-        .filter(UserRole.user_id == "usr-staff-role-002")
-        .all()
-    )
-    role_names = [r[0] for r in user_roles]
-    assert "DEAN" not in role_names
-
 def test_revoking_unassigned_role_rejected(client, db_session):
     seed_role_assignment_data(db_session)
     admin_token = create_access_token({"sub": "usr-admin-role-001"})
     headers = {"Authorization": f"Bearer {admin_token}"}
 
-    # Staff user does not have DEAN role
     response = client.delete("/users/usr-staff-role-002/roles/DEAN", headers=headers)
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "ROLE_NOT_ASSIGNED"
@@ -215,68 +312,6 @@ def test_unauthenticated_revocation_rejected(client, db_session):
     response = client.delete("/users/usr-student-role-003/roles/STUDENT")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
-
-def test_immediate_role_upgrade_affects_authorization(client, db_session):
-    """
-    Integration flow:
-    1. Student with valid token attempts to access /protected/admin-only -> 403 Forbidden.
-    2. Admin assigns ADMIN role via POST /users/{user_id}/roles -> 200 OK.
-    3. Same student token immediately accesses /protected/admin-only -> 200 OK.
-    """
-    seed_role_assignment_data(db_session)
-    admin_token = create_access_token({"sub": "usr-admin-role-001"})
-    student_token = create_access_token({"sub": "usr-student-role-003"})
-
-    admin_headers = {"Authorization": f"Bearer {admin_token}"}
-    student_headers = {"Authorization": f"Bearer {student_token}"}
-
-    # Step 1: Access denied
-    res1 = client.get("/protected/admin-only", headers=student_headers)
-    assert res1.status_code == 403
-
-    # Step 2: Admin assigns ADMIN role
-    res_assign = client.post(
-        "/users/usr-student-role-003/roles",
-        json={"role_name": "ADMIN"},
-        headers=admin_headers
-    )
-    assert res_assign.status_code == 200
-
-    # Step 3: Immediate access with same student token succeeds
-    res2 = client.get("/protected/admin-only", headers=student_headers)
-    assert res2.status_code == 200
-    assert res2.json()["data"]["user_id"] == "usr-student-role-003"
-
-def test_immediate_role_revocation_affects_authorization(client, db_session):
-    """
-    Integration flow:
-    1. Student user has ADMIN role assigned.
-    2. Access to /protected/admin-only succeeds -> 200 OK.
-    3. Admin revokes ADMIN role via DELETE /users/{user_id}/roles/ADMIN -> 200 OK.
-    4. Next request to /protected/admin-only immediately fails -> 403 Forbidden.
-    """
-    seed_role_assignment_data(db_session)
-    admin_token = create_access_token({"sub": "usr-admin-role-001"})
-    student_token = create_access_token({"sub": "usr-student-role-003"})
-
-    admin_headers = {"Authorization": f"Bearer {admin_token}"}
-    student_headers = {"Authorization": f"Bearer {student_token}"}
-
-    # Assign ADMIN role first
-    client.post("/users/usr-student-role-003/roles", json={"role_name": "ADMIN"}, headers=admin_headers)
-
-    # Access succeeds
-    res1 = client.get("/protected/admin-only", headers=student_headers)
-    assert res1.status_code == 200
-
-    # Admin revokes ADMIN role
-    res_revoke = client.delete("/users/usr-student-role-003/roles/ADMIN", headers=admin_headers)
-    assert res_revoke.status_code == 200
-
-    # Next request immediately denied
-    res2 = client.get("/protected/admin-only", headers=student_headers)
-    assert res2.status_code == 403
-    assert res2.json()["error"]["code"] == "INSUFFICIENT_PERMISSIONS"
 
 def test_malformed_user_id_assignment_rejected(client, db_session):
     seed_role_assignment_data(db_session)

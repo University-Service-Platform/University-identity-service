@@ -24,6 +24,10 @@ class UserRoleIdentificationResponse(BaseModel):
 class UserRoleAssignRequest(BaseModel):
     role_name: str = Field(..., min_length=2, max_length=50, description="Role name to assign (e.g. ADMIN, STAFF, DEAN)")
 
+class UserRoleUpdateRequest(BaseModel):
+    old_role_name: str = Field(..., min_length=2, max_length=50, description="Existing assigned role name to replace")
+    new_role_name: str = Field(..., min_length=2, max_length=50, description="New role name to assign")
+
 class UserRoleAssignmentData(BaseModel):
     user_id: str
     university_id: str

@@ -6,6 +6,7 @@ from app.services.role_assignment_service import RoleAssignmentService
 from app.schemas.role import (
     UserRoleIdentificationResponse,
     UserRoleAssignRequest,
+    UserRoleUpdateRequest,
     UserRoleAssignmentResponse
 )
 from app.dependencies.auth import require_active_account, RoleChecker
@@ -45,6 +46,27 @@ def assign_user_role(
     service = RoleAssignmentService(db)
     assignment_data = service.assign_role(user_id=user_id, role_name=role_in.role_name)
     return UserRoleAssignmentResponse(success=True, data=assignment_data)
+
+@router.put(
+    "/users/{user_id}/roles",
+    response_model=UserRoleAssignmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update User-Role Relationship (USM-94)",
+    description="Update an existing user-role relationship for a user account. Accessible by authorized administrators. Updated authorization applies to subsequent requests."
+)
+def update_user_role(
+    user_id: str,
+    role_in: UserRoleUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RoleChecker(["ADMIN"]))
+):
+    service = RoleAssignmentService(db)
+    update_data = service.update_user_role(
+        user_id=user_id,
+        old_role_name=role_in.old_role_name,
+        new_role_name=role_in.new_role_name
+    )
+    return UserRoleAssignmentResponse(success=True, data=update_data)
 
 @router.delete(
     "/users/{user_id}/roles/{role_name}",

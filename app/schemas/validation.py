@@ -20,6 +20,8 @@ class UserValidationData(BaseModel):
     status: AccountStatus
     is_valid: bool
     roles: List[str] = []
+    is_authorized: bool = True
+    required_role_checked: Optional[str] = None
 
 class UserValidationResponse(BaseModel):
     success: bool = True
