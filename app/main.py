@@ -1,14 +1,31 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
-from app.database import engine, Base
+from app.database import engine, Base, SessionLocal
+from app.models.role import Role
 from app.routes.validation import router as validation_router
 from app.routes.health import router as health_router
 from app.routes.protected_example import router as protected_example_router
 from app.routes.roles import router as roles_router
 from app.routes.users import router as users_router
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+def init_db():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        default_roles = [
+            ("ADMIN", "Administrator Role"),
+            ("STAFF", "Staff Member Role"),
+            ("STUDENT", "Student Role")
+        ]
+        for role_name, description in default_roles:
+            existing = db.query(Role).filter(Role.name == role_name).first()
+            if not existing:
+                db.add(Role(name=role_name, description=description))
+        db.commit()
+    finally:
+        db.close()
+
+init_db()
 
 app = FastAPI(
     title="University Identity & Auth Service",
@@ -32,6 +49,8 @@ async def custom_http_exception_handler(request: Request, exc: HTTPException):
         code = "FORBIDDEN"
     elif exc.status_code == 404:
         code = "NOT_FOUND"
+    elif exc.status_code == 409:
+        code = "CONFLICT"
 
     return JSONResponse(
         status_code=exc.status_code,

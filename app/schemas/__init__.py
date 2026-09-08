@@ -1,11 +1,22 @@
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import (
+    UserBase,
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    UserSingleResponse,
+    UserListResponse
+)
 from app.schemas.validation import APIResponse, ErrorDetail, UserValidationData, UserValidationResponse
 from app.schemas.role import RoleResponse, UserRoleData, UserRoleIdentificationResponse
 from app.schemas.profile import UserProfileData, UserProfileResponse
 
 __all__ = [
+    "UserBase",
     "UserCreate",
+    "UserUpdate",
     "UserResponse",
+    "UserSingleResponse",
+    "UserListResponse",
     "APIResponse",
     "ErrorDetail",
     "UserValidationData",
