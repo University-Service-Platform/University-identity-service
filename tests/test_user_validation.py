@@ -93,3 +93,22 @@ def test_validate_malformed_identifier(client, db_session):
     data = response.json()
     assert data["success"] is False
     assert data["error"]["code"] == "INVALID_IDENTIFIER_FORMAT"
+
+def test_validate_user_with_matching_required_role(client, db_session):
+    seed_users(db_session)
+    response = client.get("/validation/users/usr-active-001?required_role=STUDENT")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["required_role_checked"] == "STUDENT"
+    assert data["data"]["is_authorized"] is True
+
+def test_validate_user_with_mismatching_required_role(client, db_session):
+    seed_users(db_session)
+    response = client.get("/validation/users/usr-active-001?required_role=ADMIN")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["required_role_checked"] == "ADMIN"
+    assert data["data"]["is_authorized"] is False
+

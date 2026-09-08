@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.repositories.user_repository import UserRepository
 from app.models.user import AccountStatus
@@ -19,7 +19,17 @@ class UserValidationService:
         pattern = r"^[a-zA-Z0-9_-]{3,50}$"
         return bool(re.match(pattern, user_id.strip()))
 
-    def validate_user_account(self, user_id: str, require_active: bool = False) -> UserValidationData:
+    def validate_user_account(
+        self,
+        user_id: str,
+        require_active: bool = False,
+        required_role: Optional[str] = None
+    ) -> UserValidationData:
+        """
+        USM-42 & USM-124 Inter-Service User Identity & Role Validation.
+        Validates user existence, account status, role relationships, and optional required role authorization.
+        Enables Groups 6, 7, and 8 to validate identity/roles without direct DB access.
+        """
         # Step 1: Validate identifier format
         if not self.validate_identifier_format(user_id):
             raise HTTPException(
@@ -50,8 +60,10 @@ class UserValidationService:
                 }
             )
 
-        # Step 3: Extract roles
+        # Step 3: Extract roles (with account_type fallback if no explicit UserRole mapping)
         roles = [r.role.name for r in user.roles if r.role]
+        if not roles:
+            roles = [user.account_type.value]
 
         is_active = user.status == AccountStatus.ACTIVE
 
@@ -68,6 +80,12 @@ class UserValidationService:
                 }
             )
 
+        # Step 5: Evaluate role authorization for requested role (USM-124)
+        is_authorized = True
+        if required_role:
+            norm_req_role = required_role.strip().upper()
+            is_authorized = any(r.upper() == norm_req_role for r in roles)
+
         return UserValidationData(
             user_id=user.id,
             university_id=user.university_id,
@@ -76,5 +94,7 @@ class UserValidationService:
             account_type=user.account_type,
             status=user.status,
             is_valid=is_active,
-            roles=roles
+            roles=roles,
+            is_authorized=is_authorized,
+            required_role_checked=required_role.strip().upper() if required_role else None
         )
