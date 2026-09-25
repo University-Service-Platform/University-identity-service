@@ -1,30 +1,22 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from jose import JWTError, jwt
+from jose import JWTError
 from datetime import timedelta
 from typing import Optional, List
 
-from app.core.config import get_settings
-from app.core.time import utc_now
+from app.core.security import decode_token, encode_token
 from app.database import get_db
 from app.models.user import User, AccountStatus
 from app.repositories.permission_repository import PermissionRepository
 from app.repositories.user_repository import UserRepository
 from app.services.user_lookup import effective_role_names
 
-_settings = get_settings()
-SECRET_KEY = _settings.jwt_secret_key
-ALGORITHM = _settings.jwt_algorithm
-ACCESS_TOKEN_EXPIRE_MINUTES = _settings.access_token_expire_minutes
-
 security = HTTPBearer(auto_error=False)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = utc_now() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    """Sign an access token for the given claims (must include 'sub'); adds iss/aud/iat/exp."""
+    return encode_token(data, expires_delta)
 
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
@@ -45,7 +37,7 @@ def get_current_user(
 
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(

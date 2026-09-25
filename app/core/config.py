@@ -18,7 +18,8 @@ def _env_int(name: str, default: int) -> int:
 
 API_V1_PREFIX = "/api/v1"
 
-DEVELOPMENT_JWT_SECRET ="development_secret_key_change_in_production"
+DEVELOPMENT_JWT_SECRET = "development_secret_key_change_in_production"
+SUPPORTED_JWT_ALGORITHMS = ("RS256", "HS256")
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,10 @@ class Settings:
     database_url: str
     jwt_algorithm: str
     jwt_secret_key: str
+    jwt_private_key_path: Optional[str]
+    jwt_public_key_path: Optional[str]
+    jwt_issuer: str
+    jwt_audience: str
     access_token_expire_minutes: int
     log_level: str
 
@@ -40,10 +45,18 @@ class Settings:
         return self.environment.lower() == "production"
 
     def validate(self) -> None:
-        """Refuse to start a production deployment with development-only secrets."""
-        if self.is_production and self.jwt_secret_key == DEVELOPMENT_JWT_SECRET:
+        """Refuse to start with an unsupported algorithm or, in production, development-only secrets."""
+        if self.jwt_algorithm not in SUPPORTED_JWT_ALGORITHMS:
+            raise RuntimeError(f"JWT_ALGORITHM must be one of {SUPPORTED_JWT_ALGORITHMS}.")
+        if not self.is_production:
+            return
+        if self.jwt_algorithm == "HS256" and self.jwt_secret_key == DEVELOPMENT_JWT_SECRET:
             raise RuntimeError(
                 "JWT_SECRET_KEY must be set to a non-default value when ENVIRONMENT=production."
+            )
+        if self.jwt_algorithm == "RS256" and not (self.jwt_private_key_path and self.jwt_public_key_path):
+            raise RuntimeError(
+                "JWT_PRIVATE_KEY_PATH and JWT_PUBLIC_KEY_PATH must be set when ENVIRONMENT=production."
             )
 
 
@@ -53,8 +66,12 @@ def get_settings() -> Settings:
         service_name="identity-service",
         environment=_env("ENVIRONMENT", "development"),
         database_url=_env("DATABASE_URL", "sqlite:///./identity.db"),
-        jwt_algorithm=_env("JWT_ALGORITHM", "HS256"),
+        jwt_algorithm=_env("JWT_ALGORITHM", "RS256").upper(),
         jwt_secret_key=_env("JWT_SECRET_KEY", DEVELOPMENT_JWT_SECRET),
+        jwt_private_key_path=_env("JWT_PRIVATE_KEY_PATH"),
+        jwt_public_key_path=_env("JWT_PUBLIC_KEY_PATH"),
+        jwt_issuer=_env("JWT_ISSUER", "university-identity-service"),
+        jwt_audience=_env("JWT_AUDIENCE", "university-services-platform"),
         access_token_expire_minutes=_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60),
         log_level=_env("LOG_LEVEL", "INFO"),
     )

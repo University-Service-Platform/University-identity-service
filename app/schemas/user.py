@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional, List
 from datetime import datetime
 from app.models.user import AccountType, AccountStatus
+from app.schemas.auth import Password
 
 class UserBase(BaseModel):
     university_id: str = Field(..., min_length=3, max_length=50, description="University ID, e.g. STU001 or STF001")
@@ -10,7 +11,9 @@ class UserBase(BaseModel):
     account_type: AccountType = Field(..., description="STUDENT or STAFF")
 
 class UserCreate(UserBase):
-    pass
+    # Optional so existing clients keep working; without it the account cannot log in
+    # until an administrator sets a password.
+    password: Optional[Password] = None
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100, description="Updated Full Name")

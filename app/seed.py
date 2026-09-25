@@ -4,6 +4,10 @@ Seed the Identity Service database.
     python -m app.seed          # system roles and permissions (safe for every environment)
     python -m app.seed --demo   # system roles + synthetic demo users
 
+Demo users get the password from the DEMO_USER_PASSWORD environment variable (no password
+is stored in source control). Without it they are created without a password and cannot
+log in until an administrator sets one.
+
 Run `alembic upgrade head` first. Seeding is idempotent: existing rows are never
 modified or deleted, so it is safe to run repeatedly.
 
@@ -11,11 +15,13 @@ All demo data is synthetic. Never load real student or staff records.
 """
 import argparse
 import logging
+import os
 from dataclasses import dataclass
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.database import SessionLocal
 from app.models.role import Role, UserRole
 from app.models.user import AccountStatus, AccountType, User
@@ -58,7 +64,8 @@ def _role_id(db: Session, name: str) -> Optional[int]:
     return role.id if role else None
 
 
-def seed_demo_users(db: Session) -> int:
+def seed_demo_users(db: Session, password: Optional[str] = None) -> int:
+    password_hash = hash_password(password) if password else None
     created = 0
     for demo in DEMO_USERS:
         if db.query(User).filter(User.id == demo.id).first():
@@ -70,6 +77,7 @@ def seed_demo_users(db: Session) -> int:
             email=demo.email,
             account_type=demo.account_type,
             status=demo.status,
+            password_hash=password_hash,
         ))
         db.flush()
         db.add(UserRole(user_id=demo.id, role_id=_role_id(db, demo.role)))
@@ -89,7 +97,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         ensure_reference_data(db)
         logger.info("Reference data (system roles and permissions) is in place.")
         if args.demo:
-            logger.info("Created %d synthetic demo user(s).", seed_demo_users(db))
+            password = os.getenv("DEMO_USER_PASSWORD")
+            if not password:
+                logger.warning("DEMO_USER_PASSWORD is not set: new demo users will not be able to log in.")
+            logger.info("Created %d synthetic demo user(s).", seed_demo_users(db, password))
     finally:
         db.close()
 

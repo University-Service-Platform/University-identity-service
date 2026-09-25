@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from app.core.config import API_V1_PREFIX, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, register_request_logging
+from app.core.security import get_signing_keys
+from app.routes.auth import jwks_router, router as auth_router
 from app.routes.validation import router as validation_router
 from app.routes.health import router as health_router
 from app.routes.protected_example import router as protected_example_router
@@ -12,6 +14,9 @@ from app.routes.users import router as users_router
 # The schema is managed by Alembic migrations (`alembic upgrade head`) and reference
 # data by `python -m app.seed`; importing the app no longer touches the database.
 configure_logging(get_settings().log_level)
+# Load (or, in development, generate) the JWT signing keys at startup so a
+# misconfigured key path fails fast instead of on the first login.
+get_signing_keys()
 
 app = FastAPI(
     title="University Identity & Auth Service",
@@ -30,4 +35,6 @@ app.include_router(protected_example_router)
 app.include_router(roles_router)
 app.include_router(users_router)
 
+app.include_router(jwks_router)
+app.include_router(auth_router, prefix=API_V1_PREFIX)
 app.include_router(role_catalogue_router, prefix=API_V1_PREFIX)

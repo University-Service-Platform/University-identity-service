@@ -21,6 +21,8 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     account_type = Column(SQLEnum(AccountType), nullable=False)
     status = Column(SQLEnum(AccountStatus), default=AccountStatus.ACTIVE, nullable=False)
+    # bcrypt hash; NULL means no password has been set and the account cannot log in yet
+    password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 

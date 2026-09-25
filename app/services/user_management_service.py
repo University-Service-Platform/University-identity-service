@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 import uuid
 from typing import List
 
+from app.core.security import hash_password
 from app.core.time import utc_now
 from app.models.user import User, AccountStatus
 from app.repositories.user_repository import UserRepository
@@ -66,6 +67,7 @@ class UserManagementService:
             email=str(user_in.email).strip().lower(),
             account_type=user_in.account_type,
             status=AccountStatus.ACTIVE,
+            password_hash=hash_password(user_in.password) if user_in.password else None,
             created_at=now,
             updated_at=now
         )
@@ -110,6 +112,12 @@ class UserManagementService:
         user.updated_at = utc_now()
         updated_user = self.repository.update(user)
         return self._format_user_response(updated_user)
+
+    def set_password(self, user_id: str, new_password: str) -> User:
+        user = find_user_or_404(self.repository, user_id)
+        user.password_hash = hash_password(new_password)
+        user.updated_at = utc_now()
+        return self.repository.update(user)
 
     def update_user_status(self, user_id: str, new_status: AccountStatus) -> UserResponse:
         user = find_user_or_404(self.repository, user_id)
