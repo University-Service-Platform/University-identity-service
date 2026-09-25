@@ -119,6 +119,8 @@ uvicorn app.main:app --port 8001 --reload
 
 ## 7. API overview
 
+> **Integrating from another service?** Read the cross-service contract in [docs/API_CONTRACT.md](docs/API_CONTRACT.md). It covers the JWT claim structure, user, role and eligibility validation, error codes, sample JSON, the gateway recommendation and notes for Group 6. Design decisions are recorded in [docs/adr/](docs/adr/).
+
 All endpoints below are under **`/api/v1`**. Responses use `{"success": true, "data": ...}`.
 
 | Area | Method & path | Access |
