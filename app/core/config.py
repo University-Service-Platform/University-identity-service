@@ -31,6 +31,7 @@ class Settings:
     jwt_algorithm: str
     jwt_secret_key: str
     access_token_expire_minutes: int
+    log_level: str
 
     @property
     def is_production(self) -> bool:
@@ -53,6 +54,7 @@ def get_settings() -> Settings:
         jwt_algorithm=_env("JWT_ALGORITHM", "HS256"),
         jwt_secret_key=_env("JWT_SECRET_KEY", DEVELOPMENT_JWT_SECRET),
         access_token_expire_minutes=_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60),
+        log_level=_env("LOG_LEVEL", "INFO"),
     )
     settings.validate()
     return settings

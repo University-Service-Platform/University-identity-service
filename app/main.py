@@ -1,5 +1,7 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
+from app.core.config import get_settings
+from app.core.errors import register_exception_handlers
+from app.core.logging import configure_logging, register_request_logging
 from app.database import engine, Base, SessionLocal
 from app.models.role import Role
 from app.routes.validation import router as validation_router
@@ -27,6 +29,8 @@ def init_db():
 
 init_db()
 
+configure_logging(get_settings().log_level)
+
 app = FastAPI(
     title="University Identity & Auth Service",
     description="Identity microservice handling Users, Roles, Account Status, and Validation APIs.",
@@ -35,33 +39,8 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-@app.exception_handler(HTTPException)
-async def custom_http_exception_handler(request: Request, exc: HTTPException):
-    if isinstance(exc.detail, dict) and "success" in exc.detail:
-        return JSONResponse(status_code=exc.status_code, content=exc.detail)
-    
-    code = "HTTP_ERROR"
-    if exc.status_code == 400:
-        code = "BAD_REQUEST"
-    elif exc.status_code == 401:
-        code = "UNAUTHORIZED"
-    elif exc.status_code == 403:
-        code = "FORBIDDEN"
-    elif exc.status_code == 404:
-        code = "NOT_FOUND"
-    elif exc.status_code == 409:
-        code = "CONFLICT"
-
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "success": False,
-            "error": {
-                "code": code,
-                "message": str(exc.detail)
-            }
-        }
-    )
+register_exception_handlers(app)
+register_request_logging(app)
 
 app.include_router(health_router)
 app.include_router(validation_router)
