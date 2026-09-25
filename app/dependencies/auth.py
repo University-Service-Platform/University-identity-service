@@ -3,16 +3,17 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-import os
 from typing import Optional, List, Union
 
+from app.core.config import get_settings
 from app.database import get_db
 from app.models.user import User, AccountStatus
 from app.repositories.user_repository import UserRepository
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "development_secret_key_change_in_production")
-ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+_settings = get_settings()
+SECRET_KEY = _settings.jwt_secret_key
+ALGORITHM = _settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = _settings.access_token_expire_minutes
 
 security = HTTPBearer(auto_error=False)
 
