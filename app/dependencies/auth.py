@@ -2,13 +2,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
-from typing import Optional, List, Union
+from datetime import timedelta
+from typing import Optional, List
 
 from app.core.config import get_settings
+from app.core.time import utc_now
 from app.database import get_db
 from app.models.user import User, AccountStatus
 from app.repositories.user_repository import UserRepository
+from app.services.user_lookup import effective_role_names
 
 _settings = get_settings()
 SECRET_KEY = _settings.jwt_secret_key
@@ -19,7 +21,7 @@ security = HTTPBearer(auto_error=False)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = utc_now() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -117,15 +119,10 @@ class RoleChecker:
 
     def __call__(
         self,
-        current_user: User = Depends(require_active_account),
-        db: Session = Depends(get_db)
+        current_user: User = Depends(require_active_account)
     ) -> User:
-        repository = UserRepository(db)
-        user_roles = [r.upper() for r in repository.get_user_roles(current_user.id)]
-        
-        # Fallback to account_type if no explicit UserRole entity exists yet
-        if not user_roles:
-            user_roles = [current_user.account_type.value.upper()]
+        # Falls back to account_type if no explicit UserRole entity exists yet
+        user_roles = [r.upper() for r in effective_role_names(current_user)]
 
         # Check if user has any of the allowed roles
         has_permission = any(role in self.allowed_roles for role in user_roles)

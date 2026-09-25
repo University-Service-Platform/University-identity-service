@@ -1,30 +1,20 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 import uuid
-import re
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 
-from app.models.user import User, AccountStatus, AccountType
+from app.core.time import utc_now
+from app.models.user import User, AccountStatus
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.services.user_lookup import effective_role_names, find_user_or_404, require_valid_identifier
 
 class UserManagementService:
     def __init__(self, db: Session):
         self.db = db
         self.repository = UserRepository(db)
 
-    @staticmethod
-    def validate_identifier_format(user_id: str) -> bool:
-        if not user_id or not isinstance(user_id, str):
-            return False
-        pattern = r"^[a-zA-Z0-9_-]{3,50}$"
-        return bool(re.match(pattern, user_id.strip()))
-
     def _format_user_response(self, user: User) -> UserResponse:
-        roles = [r.role.name for r in user.roles if r.role]
-        if not roles and user.account_type:
-            roles = [user.account_type.value]
         return UserResponse(
             id=user.id,
             university_id=user.university_id,
@@ -34,22 +24,12 @@ class UserManagementService:
             status=user.status,
             created_at=user.created_at,
             updated_at=user.updated_at,
-            roles=roles
+            roles=effective_role_names(user)
         )
 
     def create_user(self, user_in: UserCreate) -> UserResponse:
         # Step 1: Validate university_id format
-        if not self.validate_identifier_format(user_in.university_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"University identifier '{user_in.university_id}' has an invalid format."
-                    }
-                }
-            )
+        require_valid_identifier(user_in.university_id, label="University identifier")
 
         # Step 2: Check university_id uniqueness
         if self.repository.get_by_university_id(user_in.university_id):
@@ -78,6 +58,7 @@ class UserManagementService:
             )
 
         # Step 4: Create User instance
+        now = utc_now()
         new_user = User(
             id=f"usr-{uuid.uuid4().hex[:12]}",
             university_id=user_in.university_id.strip(),
@@ -85,8 +66,8 @@ class UserManagementService:
             email=str(user_in.email).strip().lower(),
             account_type=user_in.account_type,
             status=AccountStatus.ACTIVE,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=now,
+            updated_at=now
         )
 
         persisted_user = self.repository.create(new_user)
@@ -97,64 +78,11 @@ class UserManagementService:
         return [self._format_user_response(u) for u in users]
 
     def get_user_by_id(self, user_id: str) -> UserResponse:
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        user = self.repository.get_by_id(user_id)
-        if not user:
-            user = self.repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
-
+        user = find_user_or_404(self.repository, user_id)
         return self._format_user_response(user)
 
     def update_user(self, user_id: str, user_update: UserUpdate) -> UserResponse:
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        user = self.repository.get_by_id(user_id)
-        if not user:
-            user = self.repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
+        user = find_user_or_404(self.repository, user_id)
 
         # Check email uniqueness if email is being updated
         if user_update.email is not None:
@@ -179,71 +107,18 @@ class UserManagementService:
         if user_update.account_type is not None:
             user.account_type = user_update.account_type
 
-        user.updated_at = datetime.utcnow()
+        user.updated_at = utc_now()
         updated_user = self.repository.update(user)
         return self._format_user_response(updated_user)
 
     def update_user_status(self, user_id: str, new_status: AccountStatus) -> UserResponse:
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        user = self.repository.get_by_id(user_id)
-        if not user:
-            user = self.repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
+        user = find_user_or_404(self.repository, user_id)
 
         user.status = new_status
-        user.updated_at = datetime.utcnow()
+        user.updated_at = utc_now()
         updated_user = self.repository.update(user)
         return self._format_user_response(updated_user)
 
     def delete_user(self, user_id: str) -> None:
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        user = self.repository.get_by_id(user_id)
-        if not user:
-            user = self.repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
-
+        user = find_user_or_404(self.repository, user_id)
         self.repository.delete(user)

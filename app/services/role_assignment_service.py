@@ -1,12 +1,11 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-import re
-from typing import List
 
 from app.models.role import UserRole
 from app.repositories.user_repository import UserRepository
 from app.repositories.role_repository import RoleRepository
 from app.schemas.role import UserRoleAssignmentData
+from app.services.user_lookup import find_user_or_404
 
 class RoleAssignmentService:
     def __init__(self, db: Session):
@@ -14,43 +13,9 @@ class RoleAssignmentService:
         self.user_repository = UserRepository(db)
         self.role_repository = RoleRepository(db)
 
-    @staticmethod
-    def validate_identifier_format(user_id: str) -> bool:
-        if not user_id or not isinstance(user_id, str):
-            return False
-        pattern = r"^[a-zA-Z0-9_-]{3,50}$"
-        return bool(re.match(pattern, user_id.strip()))
-
     def assign_role(self, user_id: str, role_name: str) -> UserRoleAssignmentData:
-        # Step 1: Validate user identifier
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        # Step 2: Find user
-        user = self.user_repository.get_by_id(user_id)
-        if not user:
-            user = self.user_repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
+        # Steps 1-2: Validate identifier and find user
+        user = find_user_or_404(self.user_repository, user_id)
 
         # Step 3: Find role by name (normalized)
         normalized_role_name = role_name.strip().upper()
@@ -99,35 +64,8 @@ class RoleAssignmentService:
         )
 
     def revoke_role(self, user_id: str, role_name: str) -> UserRoleAssignmentData:
-        # Step 1: Validate user identifier
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        # Step 2: Find user
-        user = self.user_repository.get_by_id(user_id)
-        if not user:
-            user = self.user_repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
+        # Steps 1-2: Validate identifier and find user
+        user = find_user_or_404(self.user_repository, user_id)
 
         # Step 3: Find role by name
         normalized_role_name = role_name.strip().upper()
@@ -182,35 +120,8 @@ class RoleAssignmentService:
         Replaces an existing assigned role with a new target system role for a user.
         Rejects invalid role targets, missing existing assignments, and non-existent users.
         """
-        # Step 1: Validate identifier format
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        # Step 2: Find user
-        user = self.user_repository.get_by_id(user_id)
-        if not user:
-            user = self.user_repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
+        # Steps 1-2: Validate identifier and find user
+        user = find_user_or_404(self.user_repository, user_id)
 
         # Step 3: Validate old role exists and is assigned
         norm_old_role = old_role_name.strip().upper()
