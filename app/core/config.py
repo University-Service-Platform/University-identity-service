@@ -16,6 +16,11 @@ def _env_int(name: str, default: int) -> int:
     return int(value) if value is not None else default
 
 
+def _env_float(name: str, default: float) -> float:
+    value = _env(name)
+    return float(value) if value is not None else default
+
+
 API_V1_PREFIX = "/api/v1"
 
 DEVELOPMENT_JWT_SECRET = "development_secret_key_change_in_production"
@@ -39,6 +44,9 @@ class Settings:
     jwt_audience: str
     access_token_expire_minutes: int
     log_level: str
+    # Directory Service integration; None disables it (dependent features return 503)
+    directory_service_base_url: Optional[str]
+    directory_service_timeout_seconds: float
 
     @property
     def is_production(self) -> bool:
@@ -74,6 +82,8 @@ def get_settings() -> Settings:
         jwt_audience=_env("JWT_AUDIENCE", "university-services-platform"),
         access_token_expire_minutes=_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 60),
         log_level=_env("LOG_LEVEL", "INFO"),
+        directory_service_base_url=_env("DIRECTORY_SERVICE_BASE_URL"),
+        directory_service_timeout_seconds=_env_float("DIRECTORY_SERVICE_TIMEOUT_SECONDS", 3.0),
     )
     settings.validate()
     return settings
