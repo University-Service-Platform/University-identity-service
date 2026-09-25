@@ -5,8 +5,9 @@ from app.core.config import get_settings
 from app.core.security import burn_password_check, encode_token, hash_password, verify_password
 from app.core.time import utc_now
 from app.models.user import AccountStatus, User
+from app.repositories.permission_repository import PermissionRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import TokenData
+from app.schemas.auth import CurrentIdentityData, TokenData
 from app.services.user_lookup import effective_role_names
 
 INVALID_CREDENTIALS = HTTPException(
@@ -39,6 +40,7 @@ def build_access_claims(user: User) -> dict:
 class AuthService:
     def __init__(self, db: Session):
         self.repository = UserRepository(db)
+        self.permission_repository = PermissionRepository(db)
 
     def _find_by_username(self, username: str):
         username = username.strip()
@@ -79,6 +81,21 @@ class AuthService:
             user_id=user.id,
             university_id=user.university_id,
             roles=claims["roles"],
+        )
+
+    def current_identity(self, user: User) -> CurrentIdentityData:
+        """Identity, roles and permissions of the authenticated user, read live from the Identity DB."""
+        roles = effective_role_names(user)
+        return CurrentIdentityData(
+            user_id=user.id,
+            university_id=user.university_id,
+            name=user.name,
+            email=user.email,
+            account_type=user.account_type,
+            status=user.status,
+            roles=roles,
+            primary_role=roles[0],
+            permissions=self.permission_repository.get_codes_for_roles(roles),
         )
 
     def change_password(self, user: User, current_password: str, new_password: str) -> None:

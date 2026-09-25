@@ -3,6 +3,7 @@ from typing import Annotated, List
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.core.security import BCRYPT_MAX_PASSWORD_BYTES
+from app.models.user import AccountStatus, AccountType
 
 
 def _check_password_bytes(value: str) -> str:
@@ -36,6 +37,23 @@ class TokenData(BaseModel):
 class TokenResponse(BaseModel):
     success: bool = True
     data: TokenData
+
+
+class CurrentIdentityData(BaseModel):
+    user_id: str
+    university_id: str
+    name: str
+    email: str
+    account_type: AccountType
+    status: AccountStatus
+    roles: List[str]
+    primary_role: str
+    permissions: List[str] = Field(..., description="Identity Service permissions granted by the user's roles")
+
+
+class CurrentIdentityResponse(BaseModel):
+    success: bool = True
+    data: CurrentIdentityData
 
 
 class PasswordChangeRequest(BaseModel):

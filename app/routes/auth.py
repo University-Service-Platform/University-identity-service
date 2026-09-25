@@ -6,6 +6,7 @@ from app.database import get_db
 from app.dependencies.auth import require_active_account, require_permission
 from app.models.user import User
 from app.schemas.auth import (
+    CurrentIdentityResponse,
     LoginRequest,
     MessageData,
     MessageResponse,
@@ -32,6 +33,21 @@ jwks_router = APIRouter(tags=["Authentication"])
 )
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(success=True, data=AuthService(db).login(credentials.username, credentials.password))
+
+
+@router.get(
+    "/auth/me",
+    response_model=CurrentIdentityResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Current Identity",
+    description="Return the authenticated user's identity, roles and permissions for role-aware navigation. "
+                "Values are read live from the Identity DB, so role changes apply immediately."
+)
+def get_current_identity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_account)
+):
+    return CurrentIdentityResponse(success=True, data=AuthService(db).current_identity(current_user))
 
 
 @router.post(
