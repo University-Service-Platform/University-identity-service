@@ -11,6 +11,7 @@ class Role(Base):
     description = Column(String(255), nullable=True)
 
     users = relationship("UserRole", back_populates="role", cascade="all, delete-orphan")
+    permissions = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
 
 class UserRole(Base):
     __tablename__ = "user_roles"

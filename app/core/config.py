@@ -16,7 +16,9 @@ def _env_int(name: str, default: int) -> int:
     return int(value) if value is not None else default
 
 
-DEVELOPMENT_JWT_SECRET = "development_secret_key_change_in_production"
+API_V1_PREFIX = "/api/v1"
+
+DEVELOPMENT_JWT_SECRET ="development_secret_key_change_in_production"
 
 
 @dataclass(frozen=True)

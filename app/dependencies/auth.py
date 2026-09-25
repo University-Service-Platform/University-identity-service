@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.time import utc_now
 from app.database import get_db
 from app.models.user import User, AccountStatus
+from app.repositories.permission_repository import PermissionRepository
 from app.repositories.user_repository import UserRepository
 from app.services.user_lookup import effective_role_names
 
@@ -141,3 +142,34 @@ class RoleChecker:
 
 def require_roles(allowed_roles: List[str]):
     return RoleChecker(allowed_roles)
+
+class PermissionChecker:
+    """
+    Permission-based authorization dependency.
+    Resolves the permissions granted by the current active user's roles from the Identity DB
+    (never from client-supplied data) and rejects the request if the required one is missing.
+    """
+    def __init__(self, required_permission: str):
+        self.required_permission = required_permission
+
+    def __call__(
+        self,
+        current_user: User = Depends(require_active_account),
+        db: Session = Depends(get_db)
+    ) -> User:
+        granted = PermissionRepository(db).get_codes_for_roles(effective_role_names(current_user))
+        if self.required_permission not in granted:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "INSUFFICIENT_PERMISSIONS",
+                        "message": f"User does not have the required permission: '{self.required_permission}'"
+                    }
+                }
+            )
+        return current_user
+
+def require_permission(permission_code: str):
+    return PermissionChecker(permission_code)

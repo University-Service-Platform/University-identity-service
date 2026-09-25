@@ -1,7 +1,7 @@
 """
 Seed the Identity Service database.
 
-    python -m app.seed          # system roles only (safe for every environment)
+    python -m app.seed          # system roles and permissions (safe for every environment)
     python -m app.seed --demo   # system roles + synthetic demo users
 
 Run `alembic upgrade head` first. Seeding is idempotent: existing rows are never
@@ -44,6 +44,12 @@ DEMO_USERS: List[DemoUser] = [
     DemoUser("usr-student-001", "STU001", "Demo Student", AccountType.STUDENT, "STUDENT"),
     DemoUser("usr-student-002", "STU002", "Demo Inactive Student", AccountType.STUDENT, "STUDENT",
              AccountStatus.INACTIVE),
+    DemoUser("usr-academic-001", "ACD001", "Demo Academic Staff", AccountType.STAFF, "ACADEMIC_STAFF"),
+    DemoUser("usr-adminstaff-001", "ADS001", "Demo Administrative Staff", AccountType.STAFF, "ADMINISTRATIVE_STAFF"),
+    DemoUser("usr-servicedesk-001", "SDO001", "Demo Service Desk Officer", AccountType.STAFF, "SERVICE_DESK_OFFICER"),
+    DemoUser("usr-technician-001", "TEC001", "Demo Technician", AccountType.STAFF, "TECHNICIAN"),
+    DemoUser("usr-resourcemgr-001", "RMG001", "Demo Resource Manager", AccountType.STAFF, "RESOURCE_MANAGER"),
+    DemoUser("usr-organizer-001", "EVO001", "Demo Event Organizer", AccountType.STAFF, "EVENT_ORGANIZER"),
 ]
 
 
@@ -81,7 +87,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     db = SessionLocal()
     try:
         ensure_reference_data(db)
-        logger.info("Reference data (system roles) is in place.")
+        logger.info("Reference data (system roles and permissions) is in place.")
         if args.demo:
             logger.info("Created %d synthetic demo user(s).", seed_demo_users(db))
     finally:
