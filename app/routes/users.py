@@ -13,6 +13,8 @@ from app.schemas.user import (
 )
 from app.dependencies.auth import require_active_account, RoleChecker
 from app.models.user import User
+from app.services import audit_service
+from app.services.audit_service import AuditService
 
 router = APIRouter(tags=["Users"])
 
@@ -30,6 +32,11 @@ def create_user(
 ):
     service = UserManagementService(db)
     user_data = service.create_user(user_in)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_CREATED, "USER", user_data.id,
+        {"university_id": user_data.university_id, "account_type": user_data.account_type.value,
+         "password_set": user_in.password is not None},
+    )
     return UserSingleResponse(success=True, data=user_data)
 
 @router.get(
@@ -80,6 +87,10 @@ def update_user(
 ):
     service = UserManagementService(db)
     updated_user = service.update_user(user_id=user_id, user_update=user_update)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_UPDATED, "USER", updated_user.id,
+        {"changed_fields": sorted(user_update.model_dump(exclude_none=True))},
+    )
     return UserSingleResponse(success=True, data=updated_user)
 
 @router.patch(
@@ -97,6 +108,10 @@ def update_user_status(
 ):
     service = UserManagementService(db)
     updated_user = service.update_user_status(user_id=user_id, new_status=status_in.status)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_STATUS_CHANGED, "USER", updated_user.id,
+        {"status": status_in.status.value},
+    )
     return UserSingleResponse(success=True, data=updated_user)
 
 @router.delete(
@@ -111,7 +126,11 @@ def delete_user(
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
     service = UserManagementService(db)
-    service.delete_user(user_id=user_id)
+    deleted = service.delete_user(user_id=user_id)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_DELETED, "USER", deleted["id"],
+        {"university_id": deleted["university_id"]},
+    )
     return {
         "success": True,
         "data": {

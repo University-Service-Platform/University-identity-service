@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 import uuid
-from typing import List
+from typing import Dict, List
 
 from app.core.security import hash_password
 from app.core.time import utc_now
@@ -127,6 +127,9 @@ class UserManagementService:
         updated_user = self.repository.update(user)
         return self._format_user_response(updated_user)
 
-    def delete_user(self, user_id: str) -> None:
+    def delete_user(self, user_id: str) -> Dict[str, str]:
+        """Delete the user and return the identifiers it had (for audit records)."""
         user = find_user_or_404(self.repository, user_id)
+        identifiers = {"id": user.id, "university_id": user.university_id}
         self.repository.delete(user)
+        return identifiers

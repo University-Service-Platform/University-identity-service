@@ -14,6 +14,8 @@ from app.schemas.auth import (
     PasswordSetRequest,
     TokenResponse,
 )
+from app.services import audit_service
+from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.user_management_service import UserManagementService
 
@@ -32,7 +34,9 @@ jwks_router = APIRouter(tags=["Authentication"])
                 "Inactive accounts are rejected with 403 ACCOUNT_INACTIVE."
 )
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
-    return TokenResponse(success=True, data=AuthService(db).login(credentials.username, credentials.password))
+    token = AuthService(db).login(credentials.username, credentials.password)
+    AuditService(db).record(token.user_id, audit_service.LOGIN_SUCCEEDED, "USER", token.user_id)
+    return TokenResponse(success=True, data=token)
 
 
 @router.get(
@@ -63,6 +67,7 @@ def change_password(
     current_user: User = Depends(require_active_account)
 ):
     AuthService(db).change_password(current_user, body.current_password, body.new_password)
+    AuditService(db).record(current_user.id, audit_service.PASSWORD_CHANGED, "USER", current_user.id)
     return MessageResponse(success=True, data=MessageData(message="Password changed successfully."))
 
 
@@ -79,7 +84,8 @@ def set_user_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("users:manage"))
 ):
-    UserManagementService(db).set_password(user_id, body.new_password)
+    target = UserManagementService(db).set_password(user_id, body.new_password)
+    AuditService(db).record(current_user.id, audit_service.PASSWORD_SET, "USER", target.id)
     return MessageResponse(success=True, data=MessageData(message=f"Password for user '{user_id}' was set."))
 
 

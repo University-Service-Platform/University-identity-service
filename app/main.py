@@ -3,6 +3,7 @@ from app.core.config import API_V1_PREFIX, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, register_request_logging
 from app.core.security import get_signing_keys
+from app.routes.audit import router as audit_router
 from app.routes.auth import jwks_router, router as auth_router
 from app.routes.validation import router as validation_router
 from app.routes.health import router as health_router
@@ -38,3 +39,4 @@ app.include_router(users_router)
 app.include_router(jwks_router)
 app.include_router(auth_router, prefix=API_V1_PREFIX)
 app.include_router(role_catalogue_router, prefix=API_V1_PREFIX)
+app.include_router(audit_router, prefix=API_V1_PREFIX)

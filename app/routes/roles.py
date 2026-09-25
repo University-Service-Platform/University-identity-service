@@ -11,6 +11,8 @@ from app.schemas.role import (
 )
 from app.dependencies.auth import require_active_account, RoleChecker
 from app.models.user import User
+from app.services import audit_service
+from app.services.audit_service import AuditService
 
 router = APIRouter(tags=["Role Management & Identification"])
 
@@ -45,6 +47,10 @@ def assign_user_role(
 ):
     service = RoleAssignmentService(db)
     assignment_data = service.assign_role(user_id=user_id, role_name=role_in.role_name)
+    AuditService(db).record(
+        current_user.id, audit_service.ROLE_ASSIGNED, "USER", assignment_data.user_id,
+        {"role": role_in.role_name.strip().upper()},
+    )
     return UserRoleAssignmentResponse(success=True, data=assignment_data)
 
 @router.put(
@@ -66,6 +72,10 @@ def update_user_role(
         old_role_name=role_in.old_role_name,
         new_role_name=role_in.new_role_name
     )
+    AuditService(db).record(
+        current_user.id, audit_service.ROLE_UPDATED, "USER", update_data.user_id,
+        {"old_role": role_in.old_role_name.strip().upper(), "new_role": role_in.new_role_name.strip().upper()},
+    )
     return UserRoleAssignmentResponse(success=True, data=update_data)
 
 @router.delete(
@@ -83,4 +93,8 @@ def revoke_user_role(
 ):
     service = RoleAssignmentService(db)
     revocation_data = service.revoke_role(user_id=user_id, role_name=role_name)
+    AuditService(db).record(
+        current_user.id, audit_service.ROLE_REVOKED, "USER", revocation_data.user_id,
+        {"role": role_name.strip().upper()},
+    )
     return UserRoleAssignmentResponse(success=True, data=revocation_data)

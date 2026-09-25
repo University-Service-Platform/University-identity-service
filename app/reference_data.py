@@ -29,6 +29,7 @@ PERMISSIONS: List[Tuple[str, str]] = [
     ("users:manage_status", "Activate or deactivate user accounts"),
     ("roles:read", "View the role and permission catalogue"),
     ("roles:assign", "Assign, update and revoke user roles"),
+    ("audit:read", "View the audit log of administrative and security actions"),
 ]
 
 # Which Identity Service permissions each role grants.
