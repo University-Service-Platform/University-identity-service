@@ -166,12 +166,25 @@ class RoleAssignmentService:
                 }
             )
 
-        # Step 5: Perform update on UserRole link
+        # Step 5: Reject replacing a role with one the user already holds (one row per user/role)
+        if new_role.id != old_role.id and self.role_repository.get_user_role_link(user_id=user.id, role_id=new_role.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "ROLE_ALREADY_ASSIGNED",
+                        "message": f"Role '{norm_new_role}' is already assigned to user '{user.university_id}'."
+                    }
+                }
+            )
+
+        # Step 6: Perform update on UserRole link
         existing_link.role_id = new_role.id
         self.db.commit()
         self.db.refresh(existing_link)
 
-        # Step 6: Return updated role list
+        # Step 7: Return updated role list
         user_roles = [r.upper() for r in self.user_repository.get_user_roles(user.id)]
         primary_role = user_roles[0] if user_roles else user.account_type.value
 
