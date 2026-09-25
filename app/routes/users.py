@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, Request, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.integrations.directory_client import DirectoryClient, get_directory_client
 from app.services.profile_access_service import ProfileAccessService
 from app.services.user_management_service import UserManagementService
 from app.schemas.profile import UserProfileResponse
@@ -61,14 +62,17 @@ def list_users(
     response_model=UserProfileResponse,
     status_code=status.HTTP_200_OK,
     summary="Get Protected User Profile",
-    description="Retrieve user profile data. Protected access: users can view their own profile; authorized staff/admins can view any user profile."
+    description="Retrieve user profile data. Protected access: users can view their own profile; authorized staff/admins can view any user profile. "
+                "Includes the department/faculty affiliation from the Directory Service when available (see affiliation_status)."
 )
 def get_user_profile(
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_active_account)
+    current_user: User = Depends(require_active_account),
+    directory: DirectoryClient = Depends(get_directory_client)
 ):
-    service = ProfileAccessService(db)
+    service = ProfileAccessService(db, directory.with_authorization(request.headers.get("Authorization")))
     profile_data = service.get_user_profile(target_user_id=user_id, requester=current_user)
     return UserProfileResponse(success=True, data=profile_data)
 

@@ -4,6 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.models.user import AccountStatus
+from app.schemas.directory import AffiliationSummary
 
 
 class RelationshipType(str, Enum):
@@ -48,13 +49,6 @@ class MatchedResponsibility(BaseModel):
     department_id: Optional[str] = None
     department_name: Optional[str] = None
     faculty_id: Optional[str] = None
-    faculty_name: Optional[str] = None
-
-
-class AffiliationSummary(BaseModel):
-    department_id: str
-    department_name: Optional[str] = None
-    faculty_id: str
     faculty_name: Optional[str] = None
 
 

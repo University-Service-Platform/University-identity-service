@@ -20,9 +20,9 @@ from app.integrations.directory_client import (
 )
 from app.models.user import AccountStatus
 from app.repositories.user_repository import UserRepository
+from app.schemas.directory import AffiliationSummary
 from app.schemas.eligibility import (
     REASON_MESSAGES,
-    AffiliationSummary,
     EligibilityChecks,
     EligibilityData,
     EligibilityReason,
