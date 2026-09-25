@@ -1,23 +1,15 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-import re
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from app.repositories.user_repository import UserRepository
 from app.models.user import AccountStatus
-from app.schemas.validation import UserValidationData, APIResponse, ErrorDetail
+from app.schemas.validation import UserValidationData
+from app.services.user_lookup import effective_role_names, find_user_or_404
 
 class UserValidationService:
     def __init__(self, db: Session):
         self.repository = UserRepository(db)
-
-    @staticmethod
-    def validate_identifier_format(user_id: str) -> bool:
-        if not user_id or not isinstance(user_id, str):
-            return False
-        # Valid user_id must be alphanumeric with optional hyphens/underscores, between 3 and 50 chars
-        pattern = r"^[a-zA-Z0-9_-]{3,50}$"
-        return bool(re.match(pattern, user_id.strip()))
 
     def validate_user_account(
         self,
@@ -30,40 +22,11 @@ class UserValidationService:
         Validates user existence, account status, role relationships, and optional required role authorization.
         Enables Groups 6, 7, and 8 to validate identity/roles without direct DB access.
         """
-        # Step 1: Validate identifier format
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
-
-        # Step 2: Check user existence (search by ID or university_id)
-        user = self.repository.get_by_id(user_id)
-        if not user:
-            user = self.repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
+        # Steps 1-2: Validate identifier format and check user existence (by ID or university_id)
+        user = find_user_or_404(self.repository, user_id)
 
         # Step 3: Extract roles (with account_type fallback if no explicit UserRole mapping)
-        roles = [r.role.name for r in user.roles if r.role]
-        if not roles:
-            roles = [user.account_type.value]
+        roles = effective_role_names(user)
 
         is_active = user.status == AccountStatus.ACTIVE
 

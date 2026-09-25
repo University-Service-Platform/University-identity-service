@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, Request, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.integrations.directory_client import DirectoryClient, get_directory_client
 from app.services.profile_access_service import ProfileAccessService
 from app.services.user_management_service import UserManagementService
 from app.schemas.profile import UserProfileResponse
@@ -13,6 +14,8 @@ from app.schemas.user import (
 )
 from app.dependencies.auth import require_active_account, RoleChecker
 from app.models.user import User
+from app.services import audit_service
+from app.services.audit_service import AuditService
 
 router = APIRouter(tags=["Users"])
 
@@ -30,6 +33,11 @@ def create_user(
 ):
     service = UserManagementService(db)
     user_data = service.create_user(user_in)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_CREATED, "USER", user_data.id,
+        {"university_id": user_data.university_id, "account_type": user_data.account_type.value,
+         "password_set": user_in.password is not None},
+    )
     return UserSingleResponse(success=True, data=user_data)
 
 @router.get(
@@ -54,14 +62,17 @@ def list_users(
     response_model=UserProfileResponse,
     status_code=status.HTTP_200_OK,
     summary="Get Protected User Profile",
-    description="Retrieve user profile data. Protected access: users can view their own profile; authorized staff/admins can view any user profile."
+    description="Retrieve user profile data. Protected access: users can view their own profile; authorized staff/admins can view any user profile. "
+                "Includes the department/faculty affiliation from the Directory Service when available (see affiliation_status)."
 )
 def get_user_profile(
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_active_account)
+    current_user: User = Depends(require_active_account),
+    directory: DirectoryClient = Depends(get_directory_client)
 ):
-    service = ProfileAccessService(db)
+    service = ProfileAccessService(db, directory.with_authorization(request.headers.get("Authorization")))
     profile_data = service.get_user_profile(target_user_id=user_id, requester=current_user)
     return UserProfileResponse(success=True, data=profile_data)
 
@@ -80,6 +91,10 @@ def update_user(
 ):
     service = UserManagementService(db)
     updated_user = service.update_user(user_id=user_id, user_update=user_update)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_UPDATED, "USER", updated_user.id,
+        {"changed_fields": sorted(user_update.model_dump(exclude_none=True))},
+    )
     return UserSingleResponse(success=True, data=updated_user)
 
 @router.patch(
@@ -97,6 +112,10 @@ def update_user_status(
 ):
     service = UserManagementService(db)
     updated_user = service.update_user_status(user_id=user_id, new_status=status_in.status)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_STATUS_CHANGED, "USER", updated_user.id,
+        {"status": status_in.status.value},
+    )
     return UserSingleResponse(success=True, data=updated_user)
 
 @router.delete(
@@ -111,7 +130,11 @@ def delete_user(
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
     service = UserManagementService(db)
-    service.delete_user(user_id=user_id)
+    deleted = service.delete_user(user_id=user_id)
+    AuditService(db).record(
+        current_user.id, audit_service.USER_DELETED, "USER", deleted["id"],
+        {"university_id": deleted["university_id"]},
+    )
     return {
         "success": True,
         "data": {

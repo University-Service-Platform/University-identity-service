@@ -1,26 +1,22 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
-import os
-from typing import Optional, List, Union
+from jose import JWTError
+from datetime import timedelta
+from typing import Optional, List
 
+from app.core.security import decode_token, encode_token
 from app.database import get_db
 from app.models.user import User, AccountStatus
+from app.repositories.permission_repository import PermissionRepository
 from app.repositories.user_repository import UserRepository
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "development_secret_key_change_in_production")
-ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+from app.services.user_lookup import effective_role_names
 
 security = HTTPBearer(auto_error=False)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    """Sign an access token for the given claims (must include 'sub'); adds iss/aud/iat/exp."""
+    return encode_token(data, expires_delta)
 
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
@@ -41,7 +37,7 @@ def get_current_user(
 
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(
@@ -116,15 +112,10 @@ class RoleChecker:
 
     def __call__(
         self,
-        current_user: User = Depends(require_active_account),
-        db: Session = Depends(get_db)
+        current_user: User = Depends(require_active_account)
     ) -> User:
-        repository = UserRepository(db)
-        user_roles = [r.upper() for r in repository.get_user_roles(current_user.id)]
-        
-        # Fallback to account_type if no explicit UserRole entity exists yet
-        if not user_roles:
-            user_roles = [current_user.account_type.value.upper()]
+        # Falls back to account_type if no explicit UserRole entity exists yet
+        user_roles = [r.upper() for r in effective_role_names(current_user)]
 
         # Check if user has any of the allowed roles
         has_permission = any(role in self.allowed_roles for role in user_roles)
@@ -143,3 +134,34 @@ class RoleChecker:
 
 def require_roles(allowed_roles: List[str]):
     return RoleChecker(allowed_roles)
+
+class PermissionChecker:
+    """
+    Permission-based authorization dependency.
+    Resolves the permissions granted by the current active user's roles from the Identity DB
+    (never from client-supplied data) and rejects the request if the required one is missing.
+    """
+    def __init__(self, required_permission: str):
+        self.required_permission = required_permission
+
+    def __call__(
+        self,
+        current_user: User = Depends(require_active_account),
+        db: Session = Depends(get_db)
+    ) -> User:
+        granted = PermissionRepository(db).get_codes_for_roles(effective_role_names(current_user))
+        if self.required_permission not in granted:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "INSUFFICIENT_PERMISSIONS",
+                        "message": f"User does not have the required permission: '{self.required_permission}'"
+                    }
+                }
+            )
+        return current_user
+
+def require_permission(permission_code: str):
+    return PermissionChecker(permission_code)

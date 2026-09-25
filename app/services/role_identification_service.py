@@ -1,57 +1,18 @@
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
-import re
 from app.repositories.user_repository import UserRepository
 from app.schemas.role import UserRoleData
+from app.services.user_lookup import effective_role_names, find_user_or_404
 
 class RoleIdentificationService:
     def __init__(self, db: Session):
         self.repository = UserRepository(db)
 
-    @staticmethod
-    def validate_identifier_format(user_id: str) -> bool:
-        if not user_id or not isinstance(user_id, str):
-            return False
-        pattern = r"^[a-zA-Z0-9_-]{3,50}$"
-        return bool(re.match(pattern, user_id.strip()))
-
     def get_user_role(self, user_id: str) -> UserRoleData:
-        # Validate format
-        if not self.validate_identifier_format(user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "INVALID_IDENTIFIER_FORMAT",
-                        "message": f"User identifier '{user_id}' has an invalid format."
-                    }
-                }
-            )
+        # Validate format and retrieve user
+        user = find_user_or_404(self.repository, user_id)
 
-        # Retrieve user
-        user = self.repository.get_by_id(user_id)
-        if not user:
-            user = self.repository.get_by_university_id(user_id)
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "success": False,
-                    "error": {
-                        "code": "USER_NOT_FOUND",
-                        "message": f"User with identifier '{user_id}' was not found."
-                    }
-                }
-            )
-
-        # Retrieve roles
-        roles = [r.role.name for r in user.roles if r.role]
-        if not roles:
-            # Fallback to user account_type as primary role if no explicit UserRole entity exists
-            roles = [user.account_type.value]
-
+        # Retrieve roles (falls back to account_type when no explicit UserRole exists)
+        roles = effective_role_names(user)
         primary_role = roles[0]
 
         return UserRoleData(

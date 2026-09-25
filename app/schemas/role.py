@@ -9,6 +9,19 @@ class RoleResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class RoleCatalogueEntry(BaseModel):
+    name: str = Field(..., examples=["RESOURCE_MANAGER"])
+    description: Optional[str] = None
+    permissions: List[str] = Field(default_factory=list, examples=[["profile:read_own"]])
+
+class RoleCatalogueListResponse(BaseModel):
+    success: bool = True
+    data: List[RoleCatalogueEntry]
+
+class RoleCatalogueEntryResponse(BaseModel):
+    success: bool = True
+    data: RoleCatalogueEntry
+
 class UserRoleData(BaseModel):
     user_id: str
     university_id: str

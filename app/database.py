@@ -1,8 +1,21 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-import os
+import sqlite3
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./identity.db")
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from app.core.config import get_settings
+
+DATABASE_URL = get_settings().database_url
+
+
+@event.listens_for(Engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    # SQLite ignores FOREIGN KEY / ON DELETE CASCADE unless enabled per connection.
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 
 engine = create_engine(
     DATABASE_URL,
