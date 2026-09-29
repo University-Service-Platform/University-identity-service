@@ -35,9 +35,10 @@ def platform(db_session):
 
 
 def stub_directory(responses):
-    """responses: URL path -> (status, json)"""
+    """responses: URL path -> (status, json), or a function of the request returning (status, json)"""
     def handler(request: httpx.Request) -> httpx.Response:
-        status_code, body = responses[request.url.path]
+        answer = responses[request.url.path]
+        status_code, body = answer(request) if callable(answer) else answer
         return httpx.Response(status_code, json=body)
     app.dependency_overrides[get_directory_client] = lambda: DirectoryClient(
         "http://directory.test", 1.0, transport=httpx.MockTransport(handler))
@@ -57,7 +58,7 @@ def group6_can_approve_reservation(client, token_headers, user_id, department_id
 
 
 def test_group6_resource_manager_responsible_for_department_may_approve(client, platform):
-    stub_directory({"/validation/users/usr-g6-manager/responsibilities": (200, {"success": True, "data": {
+    stub_directory({"/api/v1/validation/users/usr-g6-manager/responsibilities": (200, {"success": True, "data": {
         "user_id": "usr-g6-manager", "is_valid": True, "responsibilities": [{
             "responsibility_id": "rsp-9", "user_id": "usr-g6-manager", "department_id": "dep-cs",
             "department_name": "Computer Science", "role_title": "Lab Resource Manager", "status": "ACTIVE"}]}})})
@@ -68,7 +69,7 @@ def test_group6_resource_manager_responsible_for_department_may_approve(client, 
 
 
 def test_group6_manager_of_another_department_may_not_approve(client, platform):
-    stub_directory({"/validation/users/usr-g6-manager/responsibilities": (404, {
+    stub_directory({"/api/v1/validation/users/usr-g6-manager/responsibilities": (404, {
         "success": False, "error": {"code": "RESPONSIBILITY_NOT_FOUND", "message": "..."}})})
 
     allowed, message = group6_can_approve_reservation(client, auth_header("usr-g6-manager"), "usr-g6-manager", "dep-math")
@@ -107,10 +108,22 @@ def test_group7_student_is_not_a_technician(client, platform):
 # ---------------------------------------------------------------- Group 8
 
 def test_group8_department_only_event_registration(client, platform):
-    stub_directory({"/affiliations/users/usr-g8-student": (200, {"success": True, "data": {
-        "id": "aff-3", "user_id": "usr-g8-student", "department_id": "dep-cs", "department_name": "Computer Science",
-        "department_code": "CS", "faculty_id": "fac-sci", "faculty_name": "Faculty of Science",
-        "faculty_code": "SCI", "created_at": "2026-09-01T10:00:00"}})})
+    def affiliation_validation(request):
+        # The Directory checks all of the student's affiliations; the student is only in CS
+        if request.url.params.get("department_id") == "CS":
+            return 200, {"success": True, "data": {"user_id": "usr-g8-student", "is_valid": True, "affiliations": [{
+                "affiliation_id": "aff-3",
+                "department": {"id": "dep-cs", "code": "CS", "name": "Computer Science"},
+                "faculty": {"id": "fac-sci", "code": "SCI", "name": "Faculty of Science"}}]}}
+        return 404, {"success": False, "error": {"code": "AFFILIATION_NOT_FOUND", "message": "..."}}
+
+    stub_directory({
+        "/api/v1/validation/users/usr-g8-student/affiliation": affiliation_validation,
+        "/api/v1/affiliations/users/usr-g8-student": (200, {"success": True, "data": {
+            "id": "aff-3", "user_id": "usr-g8-student", "department_id": "dep-cs", "department_name": "Computer Science",
+            "department_code": "CS", "faculty_id": "fac-sci", "faculty_name": "Faculty of Science",
+            "faculty_code": "SCI", "created_at": "2026-09-01T10:00:00"}}),
+    })
     headers = auth_header("usr-g8-student")
     url = "/api/v1/validation/users/usr-g8-student/eligibility"
 

@@ -270,7 +270,7 @@ This implements the platform's key business rule: *not every staff member has th
 |---|---|---|
 | `user_id` (path) | yes | Internal or university ID |
 | `required_role` | no | Role the user must hold |
-| `relationship` | when a unit is given | `AFFILIATION`: the user **belongs to** the department or faculty (e.g. a student's department). `RESPONSIBILITY`: the user **is responsible for** the unit (e.g. a service desk or resource manager) |
+| `relationship` | when a unit is given | `AFFILIATION`: the user **belongs to** the department or faculty (e.g. a student's department); all of the user's affiliations are checked, so a student in two departments is eligible for both. `RESPONSIBILITY`: the user **is responsible for** the unit (e.g. a service desk or resource manager) |
 | `department_id` | no | Directory department ID (`AFFILIATION` also accepts the department **code**) |
 | `faculty_id` | no | Directory faculty ID (`AFFILIATION` also accepts the faculty **code**) |
 | `service_unit_id` | no | Directory service unit ID (`RESPONSIBILITY` only) |
@@ -418,12 +418,13 @@ The Identity Service **does not duplicate** directory data. To look up or valida
 
 | Purpose | Directory Service endpoint |
 |---|---|
-| Validate a faculty | `GET /validation/faculties/{faculty_id}` |
-| Validate a department | `GET /validation/departments/{department_id}` |
-| Validate a service unit | `GET /validation/service-units/{unit_id}` |
-| A user's service responsibilities | `GET /validation/users/{user_id}/responsibilities` |
-| A user's affiliation | `GET /affiliations/users/{user_id}` |
-| Browse or search | `GET /faculties`, `/departments`, `/service-units`, `/affiliations` |
+| Validate a faculty | `GET /api/v1/validation/faculties/{faculty_id}` |
+| Validate a department | `GET /api/v1/validation/departments/{department_id}` |
+| Validate a service unit | `GET /api/v1/validation/service-units/{unit_id}` |
+| A user's service responsibilities | `GET /api/v1/validation/users/{user_id}/responsibilities` |
+| Is a user affiliated with a department/faculty (all affiliations) | `GET /api/v1/validation/users/{user_id}/affiliation?department_id=…&faculty_id=…` |
+| A user's primary affiliation | `GET /api/v1/affiliations/users/{user_id}` |
+| Browse or search | `GET /api/v1/faculties`, `/departments`, `/service-units`, `/affiliations` |
 
 **ID format.** The Directory Service generates IDs as `<type>-<code>-<6 hex>`: faculties `fac-fsc-a11c05`, departments `dept-cs-cea025`, service units `unit-ithd-7fb5a0`, affiliations `aff-<user_id>-<6 hex>`. The random suffix differs in every environment, so look IDs up from the Directory Service rather than hard-coding them. Wherever the eligibility endpoint accepts a department or faculty **code** (for example `CS`, `FSC`), the code is stable across environments.
 
@@ -469,5 +470,6 @@ The unversioned routes (`/users…`, `/validation/users/{id}`, `/protected/*`) s
 
 | Version | Change |
 |---|---|
+| v1 | Affiliation eligibility checks all of a user's affiliations (a student in two departments was rejected for the second). The Identity Service now calls the Directory's `/api/v1` endpoints. No API changes. |
 | v1 | Hosted on Render: `https://university-identity-service.onrender.com` (PostgreSQL, persistent signing keys). No API changes. |
 | v1 | Initial versioned contract: login and JWT (RS256, JWKS), `/auth/me`, user/role validation, eligibility (affiliation and responsibility), role catalogue, audit log, standard error envelope. Sprint 1 routes kept as deprecated aliases. |

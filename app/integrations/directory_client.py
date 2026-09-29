@@ -3,9 +3,10 @@ HTTP client for the University Directory Service (Group 5), which owns faculties
 departments, service units, user affiliations and service responsibilities.
 
 The Identity Service never reads the Directory database; it only calls these
-documented Directory endpoints:
-    GET /validation/users/{user_id}/responsibilities
-    GET /affiliations/users/{user_id}
+documented Directory endpoints (versioned under /api/v1):
+    GET /api/v1/validation/users/{user_id}/responsibilities
+    GET /api/v1/validation/users/{user_id}/affiliation   (all of a user's affiliations)
+    GET /api/v1/affiliations/users/{user_id}             (the user's primary affiliation)
 
 Failures are translated into two exceptions so callers never leak downstream
 details to their own clients:
@@ -23,6 +24,17 @@ from pydantic import BaseModel, ValidationError
 from app.core.config import get_settings
 
 logger = logging.getLogger("identity.integrations.directory")
+
+DIRECTORY_API_PREFIX = "/api/v1"
+
+# Answers from the affiliation validation endpoint that mean "no matching affiliation":
+# the user has none for the unit, or the requested unit does not exist or does not fit together.
+_NO_MATCHING_AFFILIATION = {
+    (404, "AFFILIATION_NOT_FOUND"),
+    (404, "DEPARTMENT_NOT_FOUND"),
+    (404, "FACULTY_NOT_FOUND"),
+    (400, "INVALID_ORGANIZATIONAL_RELATIONSHIP"),
+}
 
 
 class DirectoryServiceUnavailable(Exception):
@@ -101,7 +113,8 @@ class DirectoryClient:
             "department_id": department_id,
             "faculty_id": faculty_id,
         }.items() if v}
-        response = self._get(f"/validation/users/{quote(user_id, safe='')}/responsibilities", params)
+        response = self._get(f"{DIRECTORY_API_PREFIX}/validation/users/{quote(user_id, safe='')}/responsibilities",
+                             params)
 
         if response.status_code == 200:
             data = self._data(response)
@@ -118,8 +131,45 @@ class DirectoryClient:
             return ResponsibilityCheck(outcome=ResponsibilityOutcome.INACTIVE)
         raise self._contract_error("responsibility status", response)
 
+    def find_user_affiliations(
+        self,
+        user_id: str,
+        department_id: Optional[str] = None,
+        faculty_id: Optional[str] = None,
+    ) -> List[Affiliation]:
+        """
+        Every affiliation of the user that matches the department and/or faculty (ID or code).
+        Checks all of the user's affiliations, not just the primary one; empty when none match.
+        """
+        params = {k: v for k, v in {"department_id": department_id, "faculty_id": faculty_id}.items() if v}
+        response = self._get(f"{DIRECTORY_API_PREFIX}/validation/users/{quote(user_id, safe='')}/affiliation",
+                             params)
+
+        if response.status_code == 200:
+            data = self._data(response)
+            try:
+                return [
+                    Affiliation(
+                        affiliation_id=match["affiliation_id"],
+                        department_id=match["department"]["id"],
+                        department_name=match["department"].get("name"),
+                        department_code=match["department"].get("code"),
+                        faculty_id=match["faculty"]["id"],
+                        faculty_name=match["faculty"].get("name"),
+                        faculty_code=match["faculty"].get("code"),
+                    )
+                    for match in data["affiliations"]
+                ]
+            except (KeyError, TypeError, AttributeError, ValidationError) as exc:
+                raise self._contract_error("affiliation validation payload", response) from exc
+
+        if (response.status_code, self._error_code(response)) in _NO_MATCHING_AFFILIATION:
+            return []
+        raise self._contract_error("affiliation validation status", response)
+
     def get_user_affiliation(self, user_id: str) -> Optional[Affiliation]:
-        response = self._get(f"/affiliations/users/{quote(user_id, safe='')}")
+        """The user's primary affiliation (for display), or None when the user has none."""
+        response = self._get(f"{DIRECTORY_API_PREFIX}/affiliations/users/{quote(user_id, safe='')}")
 
         if response.status_code == 200:
             data = self._data(response)

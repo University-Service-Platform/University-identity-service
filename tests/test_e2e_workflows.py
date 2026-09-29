@@ -149,4 +149,4 @@ def test_identity_and_directory_workflow(deployed_client):
         "required_role": "SERVICE_DESK_OFFICER", "relationship": "RESPONSIBILITY", "service_unit_id": "su-it",
     }).json()["data"]
     assert data["eligible"] is True
-    assert seen[0].url.path == "/validation/users/usr-servicedesk-001/responsibilities"
+    assert seen[0].url.path == "/api/v1/validation/users/usr-servicedesk-001/responsibilities"

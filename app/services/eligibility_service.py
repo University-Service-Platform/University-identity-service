@@ -46,12 +46,13 @@ def _query_error(message: str, field: str) -> HTTPException:
     )
 
 
-def _matches(requested: Optional[str], *candidates: Optional[str]) -> bool:
-    """A requested department/faculty may be given by ID or by code (case-insensitive)."""
-    if not requested:
-        return True
-    wanted = requested.strip().lower()
-    return any(c is not None and c.strip().lower() == wanted for c in candidates)
+def _summary(affiliation) -> AffiliationSummary:
+    return AffiliationSummary(
+        department_id=affiliation.department_id,
+        department_name=affiliation.department_name,
+        faculty_id=affiliation.faculty_id,
+        faculty_name=affiliation.faculty_name,
+    )
 
 
 class EligibilityService:
@@ -178,21 +179,17 @@ class EligibilityService:
         return True, matched
 
     def _check_affiliation(self, user_id, department_id, faculty_id, reasons):
-        affiliation = self.directory.get_user_affiliation(user_id)
-        if affiliation is None:
+        # The Directory checks all of the user's affiliations (a student may belong to
+        # several departments), matching the department/faculty by ID or code.
+        matches = self.directory.find_user_affiliations(user_id, department_id=department_id,
+                                                        faculty_id=faculty_id)
+        if matches:
+            return True, _summary(matches[0])
+
+        # No match: tell "not affiliated anywhere" apart from "affiliated elsewhere"
+        primary = self.directory.get_user_affiliation(user_id)
+        if primary is None:
             reasons.append(EligibilityReason.NO_AFFILIATION)
             return False, None
-
-        summary = AffiliationSummary(
-            department_id=affiliation.department_id,
-            department_name=affiliation.department_name,
-            faculty_id=affiliation.faculty_id,
-            faculty_name=affiliation.faculty_name,
-        )
-        satisfied = (
-            _matches(department_id, affiliation.department_id, affiliation.department_code)
-            and _matches(faculty_id, affiliation.faculty_id, affiliation.faculty_code)
-        )
-        if not satisfied:
-            reasons.append(EligibilityReason.AFFILIATION_MISMATCH)
-        return satisfied, summary
+        reasons.append(EligibilityReason.AFFILIATION_MISMATCH)
+        return False, _summary(primary)
