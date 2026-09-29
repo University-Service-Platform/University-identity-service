@@ -230,3 +230,12 @@ def test_production_requires_rs256_key_files():
 def test_unsupported_algorithm_is_rejected():
     with pytest.raises(RuntimeError):
         replace(get_settings(), jwt_algorithm="none").validate()
+
+
+@pytest.mark.parametrize("field", ["jwt_private_key_path", "jwt_public_key_path"])
+def test_key_contents_pasted_into_a_path_setting_are_rejected_without_being_echoed(field):
+    pasted = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC-secret-material\n-----END PRIVATE KEY-----"
+    with pytest.raises(RuntimeError) as error:
+        replace(get_settings(), **{field: pasted}).validate()
+    assert "must be a file path" in str(error.value)
+    assert "secret-material" not in str(error.value)

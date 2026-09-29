@@ -116,6 +116,7 @@ alembic upgrade head && python -m app.seed
 uvicorn app.main:app --port 8001 --reload
 ```
 
+- **Hosted (Render):** https://university-identity-service.onrender.com · Swagger: https://university-identity-service.onrender.com/docs · JWKS: https://university-identity-service.onrender.com/.well-known/jwks.json (free plan: sleeps after 15 minutes idle, about a minute to wake)
 - Swagger UI: http://localhost:8001/docs · ReDoc: http://localhost:8001/redoc · OpenAPI JSON: http://localhost:8001/openapi.json
 - Health: `GET /health` · Public signing keys: `GET /.well-known/jwks.json`
 
