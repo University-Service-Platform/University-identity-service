@@ -81,6 +81,15 @@ class Settings:
         """Refuse to start with an unsupported algorithm or, in production, development-only secrets."""
         if self.jwt_algorithm not in SUPPORTED_JWT_ALGORITHMS:
             raise RuntimeError(f"JWT_ALGORITHM must be one of {SUPPORTED_JWT_ALGORITHMS}.")
+        for name, value in (("JWT_PRIVATE_KEY_PATH", self.jwt_private_key_path),
+                            ("JWT_PUBLIC_KEY_PATH", self.jwt_public_key_path)):
+            # A pasted key would otherwise end up in the logs through the "file not found" error.
+            # The message must never include the value itself.
+            if value and ("-----BEGIN" in value or "\n" in value):
+                raise RuntimeError(
+                    f"{name} must be a file path (e.g. /etc/secrets/jwt_private.pem), not the key itself. "
+                    "Put the key's contents in a file instead (on Render: a Secret File)."
+                )
         if self.root_path and (not self.root_path.startswith("/") or self.root_path.endswith("/")):
             raise RuntimeError("ROOT_PATH must start with '/' and must not end with '/', e.g. /identity.")
         if not self.is_production:

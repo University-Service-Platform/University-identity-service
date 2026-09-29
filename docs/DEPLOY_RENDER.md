@@ -51,6 +51,8 @@ Blueprints cannot contain secret files, so add them once in the dashboard:
 
 Render mounts the files at `/etc/secrets/jwt_private.pem` and `/etc/secrets/jwt_public.pem`, the paths already set in `render.yaml`.
 
+> **Don't paste a key into an environment variable.** `JWT_PRIVATE_KEY_PATH` and `JWT_PUBLIC_KEY_PATH` must stay exactly `/etc/secrets/jwt_private.pem` and `/etc/secrets/jwt_public.pem`. Only the Secret Files hold the key contents. If a private key ever appears in a log, chat or screenshot, treat it as leaked: generate new keys, upload them and redeploy (see Troubleshooting).
+
 ## 4. Check the deployment
 
 Replace `<url>` with the service URL shown in the dashboard (for example `https://university-identity-service.onrender.com`).
@@ -97,6 +99,7 @@ Any Postgres URL works: `postgres://…`, `postgresql://…` and `postgresql+psy
 | Symptom | Cause and fix |
 |---|---|
 | Deploy fails with a signing-key error | Secret Files missing or misnamed (step 3). Names must be exactly `jwt_private.pem` and `jwt_public.pem` |
+| Deploy fails with `... must be a file path ..., not the key itself` | A key was pasted into `JWT_PRIVATE_KEY_PATH` or `JWT_PUBLIC_KEY_PATH`. Set both back to the `/etc/secrets/...` paths and put the contents in Secret Files. If an older version printed the key in the log, treat it as leaked: run `scripts/generate_jwt_keys.py` again, replace both Secret Files and redeploy |
 | Tokens stop working after a deploy | The keys were replaced. Upload the original files again, or ask all groups to log in again |
 | Login returns `401 INVALID_CREDENTIALS` for demo users | `DEMO_USER_PASSWORD` differs from what you typed. Demo passwords are only set when the users are first created; changing the variable later does not change existing passwords |
 | Eligibility returns `503 DEPENDENCY_UNAVAILABLE` | `DIRECTORY_SERVICE_BASE_URL` is empty or the Directory Service is asleep or down |
