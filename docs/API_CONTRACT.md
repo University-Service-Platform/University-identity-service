@@ -19,12 +19,16 @@ This document defines how other services authenticate users and check identity, 
 
 | | Value |
 |---|---|
+| **Hosted (Render)** | **`https://university-identity-service.onrender.com`**: use this for integration testing |
+| Hosted Swagger · JWKS | [`https://university-identity-service.onrender.com/docs`](https://university-identity-service.onrender.com/docs) · [`https://university-identity-service.onrender.com/.well-known/jwks.json`](https://university-identity-service.onrender.com/.well-known/jwks.json) |
 | Internal service base URL | **Configurable.** Local default `http://localhost:8001`. In Docker Compose, use the service name (e.g. `http://identity-service:8001`) |
 | API prefix | `/api/v1` |
 | Swagger / OpenAPI | `{base}/docs` · `{base}/openapi.json` |
 | Health | `GET {base}/health` (no auth) |
 | Signing keys | `GET {base}/.well-known/jwks.json` (no auth) |
 | **Gateway base path** | **To be confirmed by the API Gateway team** |
+
+**Hosted instance.** Runs on Render's free plan with PostgreSQL and fixed signing keys, so tokens and data survive restarts. It sleeps after 15 minutes without traffic; the first request after that takes about a minute, so use generous timeouts (e.g. 60–90 s) when calling it from another service. Spring services verify tokens with `spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://university-identity-service.onrender.com/.well-known/jwks.json`. Demo users are listed in the README; Group 5 shares the demo password privately.
 
 **Suggested gateway route (to be confirmed):** route `/identity/**` to the Identity Service and strip the `/identity` prefix, so that `GET {gateway}/identity/api/v1/auth/me` reaches `GET /api/v1/auth/me`. Services shouldn't hard-code a gateway path; read the Identity base URL from configuration (for example `IDENTITY_SERVICE_BASE_URL`).
 
@@ -465,4 +469,5 @@ The unversioned routes (`/users…`, `/validation/users/{id}`, `/protected/*`) s
 
 | Version | Change |
 |---|---|
+| v1 | Hosted on Render: `https://university-identity-service.onrender.com` (PostgreSQL, persistent signing keys). No API changes. |
 | v1 | Initial versioned contract: login and JWT (RS256, JWKS), `/auth/me`, user/role validation, eligibility (affiliation and responsibility), role catalogue, audit log, standard error envelope. Sprint 1 routes kept as deprecated aliases. |
