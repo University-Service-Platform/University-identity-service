@@ -21,6 +21,18 @@ def _env_float(name: str, default: float) -> float:
     return float(value) if value is not None else default
 
 
+def database_url_for(value: str) -> str:
+    """
+    Pin Postgres URLs to the psycopg (v3) driver. Hosts such as Render hand out plain
+    'postgresql://' (or legacy 'postgres://', which SQLAlchemy rejects) URLs, and the default
+    driver for those differs between SQLAlchemy versions.
+    """
+    for scheme in ("postgres://", "postgresql://"):
+        if value.startswith(scheme):
+            return "postgresql+psycopg://" + value[len(scheme):]
+    return value
+
+
 def _env_list(name: str) -> Tuple[str, ...]:
     """Comma-separated values; empty entries are dropped."""
     value = _env(name)
@@ -92,7 +104,7 @@ def get_settings() -> Settings:
     settings = Settings(
         service_name="identity-service",
         environment=_env("ENVIRONMENT", "development"),
-        database_url=_env("DATABASE_URL", "sqlite:///./identity.db"),
+        database_url=database_url_for(_env("DATABASE_URL", "sqlite:///./identity.db")),
         jwt_algorithm=_env("JWT_ALGORITHM", "RS256").upper(),
         jwt_secret_key=_env("JWT_SECRET_KEY", DEVELOPMENT_JWT_SECRET),
         jwt_private_key_path=_env("JWT_PRIVATE_KEY_PATH"),

@@ -70,3 +70,6 @@ def downgrade() -> None:
     op.drop_index("ix_users_university_id", table_name="users")
     op.drop_index("ix_users_id", table_name="users")
     op.drop_table("users")
+    # Postgres keeps enum types after their table is dropped; SQLite has none to drop
+    account_status_enum.drop(op.get_bind(), checkfirst=True)
+    account_type_enum.drop(op.get_bind(), checkfirst=True)

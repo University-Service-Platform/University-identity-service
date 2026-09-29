@@ -11,13 +11,13 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from jose import jwt
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.database import get_db
 from app.integrations.directory_client import DirectoryClient, get_directory_client
 from app.main import app
+from tests.helpers import engine_for, fresh_database_url
 from app.reference_data import ensure_reference_data
 from app.seed import seed_demo_users
 
@@ -27,13 +27,13 @@ DEMO_PASSWORD = "Demo-Passw0rd!"
 
 @pytest.fixture
 def deployed_client(tmp_path):
-    db_url = f"sqlite:///{(tmp_path / 'e2e.db').as_posix()}"
+    db_url = fresh_database_url(tmp_path, "e2e.db")
     config = Config(str(PROJECT_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(PROJECT_ROOT / "migrations"))
     config.set_main_option("sqlalchemy.url", db_url)
     command.upgrade(config, "head")
 
-    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    engine = engine_for(db_url)
     Session = sessionmaker(bind=engine, autoflush=False)
     with Session() as session:
         ensure_reference_data(session)

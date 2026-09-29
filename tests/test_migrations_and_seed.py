@@ -10,14 +10,14 @@ from sqlalchemy.orm import sessionmaker
 from app.models.role import Role, UserRole
 from app.reference_data import ROLES, ensure_reference_data
 from app.seed import DEMO_USERS, seed_demo_users
-from tests.helpers import auth_header, create_user
+from tests.helpers import auth_header, create_user, fresh_database_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
 def migrated_db_url(tmp_path):
-    return f"sqlite:///{(tmp_path / 'migrated.db').as_posix()}"
+    return fresh_database_url(tmp_path, "migrated.db")
 
 
 def alembic_config(db_url: str) -> Config:
