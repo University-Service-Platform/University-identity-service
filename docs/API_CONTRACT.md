@@ -426,6 +426,17 @@ The Identity Service **does not duplicate** directory data. To look up or valida
 | A user's primary affiliation | `GET /api/v1/affiliations/users/{user_id}` |
 | Browse or search | `GET /api/v1/faculties`, `/departments`, `/service-units`, `/affiliations` |
 
+**Authentication.** Every Directory endpoint except `GET /health` requires `Authorization: Bearer <Identity token>`. The Directory verifies it with the Identity JWKS. The Identity Service forwards the caller's token on its own Directory calls.
+
+**API Gateway: shared path.** Both services serve paths under `/api/v1/validation/users/{id}`:
+
+| Path | Service |
+|---|---|
+| `/api/v1/validation/users/{id}/affiliation`, `/api/v1/validation/users/{id}/responsibilities` | Directory |
+| `/api/v1/validation/users/{id}`, `/api/v1/validation/users/{id}/eligibility` | Identity |
+
+Route the two Directory suffixes **before** any `/api/v1/validation/users/**` rule for Identity (for example with the regex `^/api/v1/validation/users/[^/]+/(affiliation|responsibilities)$`). Otherwise those checks reach the wrong service. The Directory repository's `docs/INTEGRATION.md` lists all of its gateway routes.
+
 **ID format.** The Directory Service generates IDs as `<type>-<code>-<6 hex>`: faculties `fac-fsc-a11c05`, departments `dept-cs-cea025`, service units `unit-ithd-7fb5a0`, affiliations `aff-<user_id>-<6 hex>`. The random suffix differs in every environment, so look IDs up from the Directory Service rather than hard-coding them. Wherever the eligibility endpoint accepts a department or faculty **code** (for example `CS`, `FSC`), the code is stable across environments.
 
 The exact response formats are in the Directory Service's own OpenAPI (`{directory}/docs`). For decisions that combine **a user** with a unit, use the Identity eligibility endpoint (6.3). It checks account, role and relationship together, handles Directory failures safely, and gives one answer.
