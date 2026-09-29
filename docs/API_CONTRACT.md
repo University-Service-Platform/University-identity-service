@@ -28,6 +28,10 @@ This document defines how other services authenticate users and check identity, 
 
 **Suggested gateway route (to be confirmed):** route `/identity/**` to the Identity Service and strip the `/identity` prefix, so that `GET {gateway}/identity/api/v1/auth/me` reaches `GET /api/v1/auth/me`. Services shouldn't hard-code a gateway path; read the Identity base URL from configuration (for example `IDENTITY_SERVICE_BASE_URL`).
 
+**Running behind the gateway.** Set `ROOT_PATH=/identity` (the stripped prefix) on the Identity Service. Swagger UI then works at `{gateway}/identity/docs`, and the `Link` header on deprecated routes includes the prefix. Routing is unaffected.
+
+**Browsers (CORS).** CORS is off by default, which is correct when all browser traffic goes through the gateway. If the shared frontend calls the service directly, its origin must be listed in `CORS_ALLOWED_ORIGINS` (for example `http://localhost:5173`); ask Group 5 to add it. Tokens travel in the `Authorization` header, never in cookies, so credentials are not enabled. Browsers can read `X-Request-ID`, `Deprecation` and `Link`.
+
 Every response has an `X-Request-ID` header. If the gateway sends `X-Request-ID`, the service reuses it, so one request can be traced across services.
 
 ## 3. Authentication and JWT
@@ -278,7 +282,7 @@ This implements the platform's key business rule: *not every staff member has th
 **Order of evaluation:** first account and role (Identity DB), then, only if those pass, the relationship (Directory Service). An inactive or wrong-role user is therefore rejected even while the Directory Service is down.
 
 **Example A: service desk officer responsible for a service unit (eligible)**
-`GET /api/v1/validation/users/SDO001/eligibility?required_role=SERVICE_DESK_OFFICER&relationship=RESPONSIBILITY&service_unit_id=su-it-helpdesk`
+`GET /api/v1/validation/users/SDO001/eligibility?required_role=SERVICE_DESK_OFFICER&relationship=RESPONSIBILITY&service_unit_id=unit-ithd-7fb5a0`
 ```json
 {
   "success": true,
@@ -298,9 +302,9 @@ This implements the platform's key business rule: *not every staff member has th
       "relationship_satisfied": true
     },
     "matched_responsibilities": [{
-      "responsibility_id": "rsp-7f3a",
+      "responsibility_id": "4b1e6c2a-9d3f-4e8a-b7c1-2f5d8e9a0c13",
       "role_title": "Service Desk Lead",
-      "service_unit_id": "su-it-helpdesk",
+      "service_unit_id": "unit-ithd-7fb5a0",
       "service_unit_name": "IT Help Desk",
       "department_id": null, "department_name": null,
       "faculty_id": null, "faculty_name": null
@@ -337,8 +341,8 @@ This implements the platform's key business rule: *not every staff member has th
     "checks": { "account_active": true, "required_role": "STUDENT", "role_held": true,
                 "relationship": "AFFILIATION", "relationship_satisfied": true },
     "matched_responsibilities": [],
-    "affiliation": { "department_id": "dep-cs", "department_name": "Department of Computer Science",
-                     "faculty_id": "fac-sci", "faculty_name": "Faculty of Science" }
+    "affiliation": { "department_id": "dept-cs-cea025", "department_name": "Department of Computer Science",
+                     "faculty_id": "fac-fsc-a11c05", "faculty_name": "Faculty of Science" }
   }
 }
 ```
@@ -417,6 +421,8 @@ The Identity Service **does not duplicate** directory data. To look up or valida
 | A user's affiliation | `GET /affiliations/users/{user_id}` |
 | Browse or search | `GET /faculties`, `/departments`, `/service-units`, `/affiliations` |
 
+**ID format.** The Directory Service generates IDs as `<type>-<code>-<6 hex>`: faculties `fac-fsc-a11c05`, departments `dept-cs-cea025`, service units `unit-ithd-7fb5a0`, affiliations `aff-<user_id>-<6 hex>`. The random suffix differs in every environment, so look IDs up from the Directory Service rather than hard-coding them. Wherever the eligibility endpoint accepts a department or faculty **code** (for example `CS`, `FSC`), the code is stable across environments.
+
 The exact response formats are in the Directory Service's own OpenAPI (`{directory}/docs`). For decisions that combine **a user** with a unit, use the Identity eligibility endpoint (6.3). It checks account, role and relationship together, handles Directory failures safely, and gives one answer.
 
 ## 8. Notes for Group 6 (Facilities and Reservations)
@@ -432,10 +438,10 @@ Group 6 asked Group 5 for the following:
 | 401 / 403 / 404 errors | §4 and each endpoint's table |
 | Gateway route and base path | §2 (suggested `/identity/**` → `/api/v1`, **to be confirmed** by the Gateway team) |
 
-**Example: may this user approve a reservation for a resource owned by department `dep-cs`?**
+**Example: may this user approve a reservation for a resource owned by department `dept-cs-cea025`?**
 ```
 GET /api/v1/validation/users/{approver_id}/eligibility
-    ?required_role=RESOURCE_MANAGER&relationship=RESPONSIBILITY&department_id=dep-cs
+    ?required_role=RESOURCE_MANAGER&relationship=RESPONSIBILITY&department_id=dept-cs-cea025
 ```
 Approve only if `data.eligible == true`; otherwise show `data.message`. On `503`, don't approve; ask the user to retry.
 

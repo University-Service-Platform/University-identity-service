@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI
 from app.core.config import API_V1_PREFIX, get_settings
+from app.core.cors import register_cors
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, register_request_logging
 from app.core.security import get_signing_keys
@@ -15,7 +16,8 @@ from app.routes.users import router as users_router
 
 # The schema is managed by Alembic migrations (`alembic upgrade head`) and reference
 # data by `python -m app.seed`; importing the app no longer touches the database.
-configure_logging(get_settings().log_level)
+settings = get_settings()
+configure_logging(settings.log_level)
 # Load (or, in development, generate) the JWT signing keys at startup so a
 # misconfigured key path fails fast instead of on the first login.
 get_signing_keys()
@@ -25,11 +27,14 @@ app = FastAPI(
     description="Identity microservice handling Users, Roles, Account Status, and Validation APIs.",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    # Set when the API Gateway strips a prefix (e.g. /identity), so Swagger UI loads the right OpenAPI URL
+    root_path=settings.root_path,
 )
 
 register_exception_handlers(app)
 register_request_logging(app)
+register_cors(app, settings.cors_allowed_origins)
 
 # Unversioned infrastructure endpoints
 app.include_router(health_router)

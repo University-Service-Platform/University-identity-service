@@ -24,6 +24,9 @@ services:
       # Directory Service (runs separately; host.docker.internal reaches the host machine)
       DIRECTORY_SERVICE_BASE_URL: ${DIRECTORY_SERVICE_BASE_URL:-http://host.docker.internal:8002}
       DIRECTORY_SERVICE_TIMEOUT_SECONDS: ${DIRECTORY_SERVICE_TIMEOUT_SECONDS:-3}
+      # Browser origins for direct calls (comma-separated) and the gateway prefix, e.g. /identity
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      ROOT_PATH: ${ROOT_PATH:-}
       # Synthetic demo users (see app/seed.py)
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
