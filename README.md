@@ -64,6 +64,8 @@ python scripts/generate_jwt_keys.py   # optional in development, required in pro
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Token lifetime |
 | `DIRECTORY_SERVICE_BASE_URL` | *(empty = disabled)* | e.g. `http://localhost:8002` |
 | `DIRECTORY_SERVICE_TIMEOUT_SECONDS` | `3` | Timeout for Directory Service calls |
+| `CORS_ALLOWED_ORIGINS` | *(empty = CORS off)* | Comma-separated browser origins allowed to call the service directly, e.g. `http://localhost:5173`. `*` is rejected in production |
+| `ROOT_PATH` | *(empty)* | Prefix the API Gateway strips, e.g. `/identity`, so Swagger UI and deprecation links work behind the gateway |
 | `DEMO_USER_PASSWORD` | *(empty)* | Password given to seeded demo users |
 | `SEED_DEMO_DATA` | `false` | Container only: seed demo users on start |
 | `LOG_LEVEL` | `INFO` | Logging level |
@@ -200,8 +202,11 @@ pytest -q
 | `test_migrations_and_seed.py` | Migrations match the models, upgrade and downgrade, seed is idempotent |
 | `test_e2e_workflows.py` | Full workflows on a migrated and seeded database |
 | `test_consumer_contracts.py` | Groups 6, 7 and 8 using the documented contract |
+| `test_cors_and_root_path.py` | CORS for browser clients, running behind the gateway with `ROOT_PATH` |
 
 No test calls a real external service; the Directory Service is replaced by `httpx.MockTransport`.
+
+**CI:** `.github/workflows/ci.yml` runs the test suite on Python 3.12 for every push to `main` or a `feature-*` branch and every pull request to `main`. It then builds the Docker image, starts it with demo data, and checks `/health`, the JWKS and a demo login.
 
 **Postman:** import `docs/postman/identity-service.postman_collection.json` and `docs/postman/identity-service.local.postman_environment.json`, set `demoPassword`, then run the collection. The login request stores the token for the requests that follow, and each request has status-code tests.
 
