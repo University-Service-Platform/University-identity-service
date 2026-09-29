@@ -51,6 +51,21 @@ AFFILIATION_OK = {
 }
 
 
+# GET /api/v1/validation/users/{user_id}/affiliation: every matching affiliation of the user
+AFFILIATION_VALIDATION_OK = {
+    "success": True,
+    "data": {
+        "user_id": "usr-student-001",
+        "is_valid": True,
+        "affiliations": [{
+            "affiliation_id": "aff-2",
+            "department": {"id": "dept-math-1a2b3c", "code": "MATH", "name": "Department of Mathematics"},
+            "faculty": {"id": "fac-fsc-4d5e6f", "code": "FSC", "name": "Faculty of Science"},
+        }],
+    },
+}
+
+
 def error(code: str) -> dict:
     return {"success": False, "error": {"code": code, "message": "..."}}
 
@@ -80,7 +95,7 @@ def test_active_responsibility_is_parsed_and_filters_are_sent():
     )
     assert result.outcome is ResponsibilityOutcome.ACTIVE
     assert result.responsibilities[0].role_title == "Service Desk Lead"
-    assert seen[0].url.path == "/validation/users/usr-staff-001/responsibilities"
+    assert seen[0].url.path == "/api/v1/validation/users/usr-staff-001/responsibilities"
     assert dict(seen[0].url.params) == {"service_unit_id": "su-it"}
 
 
@@ -105,6 +120,49 @@ def test_affiliation_is_parsed():
 
 def test_missing_affiliation_returns_none():
     assert client_returning(404, error("AFFILIATION_NOT_FOUND")).get_user_affiliation("usr-x-001") is None
+
+
+def test_primary_affiliation_uses_the_versioned_path():
+    seen = []
+    client_returning(200, AFFILIATION_OK, seen=seen).get_user_affiliation("usr-student-001")
+    assert seen[0].url.path == "/api/v1/affiliations/users/usr-student-001"
+
+
+# ---------------------------------------------------------------- affiliation validation (all affiliations)
+
+def test_matching_affiliations_are_parsed_and_filters_are_sent():
+    seen = []
+    matches = client_returning(200, AFFILIATION_VALIDATION_OK, seen=seen).find_user_affiliations(
+        "usr-student-001", department_id="MATH", faculty_id="FSC"
+    )
+    assert seen[0].url.path == "/api/v1/validation/users/usr-student-001/affiliation"
+    assert dict(seen[0].url.params) == {"department_id": "MATH", "faculty_id": "FSC"}
+    assert len(matches) == 1
+    assert matches[0].affiliation_id == "aff-2"
+    assert matches[0].department_id == "dept-math-1a2b3c"
+    assert matches[0].department_code == "MATH"
+    assert matches[0].faculty_name == "Faculty of Science"
+
+
+@pytest.mark.parametrize("status_code,code", [
+    (404, "AFFILIATION_NOT_FOUND"),               # user has no affiliation with that unit
+    (404, "DEPARTMENT_NOT_FOUND"),                # requested department does not exist
+    (404, "FACULTY_NOT_FOUND"),                   # requested faculty does not exist
+    (400, "INVALID_ORGANIZATIONAL_RELATIONSHIP"), # department is not in that faculty
+])
+def test_no_matching_affiliation_returns_empty_list(status_code, code):
+    matches = client_returning(status_code, error(code)).find_user_affiliations("usr-x-001", department_id="CS")
+    assert matches == []
+
+
+@pytest.mark.parametrize("status_code,body", [
+    (200, {"success": True, "data": {"user_id": "usr-x-001", "affiliations": [{"affiliation_id": "aff-1"}]}}),
+    (200, {"success": True, "data": {"user_id": "usr-x-001"}}),       # affiliations missing
+    (404, error("SOMETHING_ELSE")),
+])
+def test_unexpected_affiliation_validation_answers_raise_directory_error(status_code, body):
+    with pytest.raises(DirectoryServiceError):
+        client_returning(status_code, body).find_user_affiliations("usr-x-001", department_id="CS")
 
 
 # ---------------------------------------------------------------- failure handling
@@ -160,4 +218,4 @@ def test_caller_authorization_is_forwarded():
 def test_user_id_is_url_encoded():
     seen = []
     client_returning(404, error("AFFILIATION_NOT_FOUND"), seen=seen).get_user_affiliation("../admin")
-    assert seen[0].url.raw_path == b"/affiliations/users/..%2Fadmin"
+    assert seen[0].url.raw_path == b"/api/v1/affiliations/users/..%2Fadmin"
