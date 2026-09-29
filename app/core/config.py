@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Tuple
 
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -19,6 +19,14 @@ def _env_int(name: str, default: int) -> int:
 def _env_float(name: str, default: float) -> float:
     value = _env(name)
     return float(value) if value is not None else default
+
+
+def _env_list(name: str) -> Tuple[str, ...]:
+    """Comma-separated values; empty entries are dropped."""
+    value = _env(name)
+    if value is None:
+        return ()
+    return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
 API_V1_PREFIX = "/api/v1"
@@ -47,6 +55,11 @@ class Settings:
     # Directory Service integration; None disables it (dependent features return 503)
     directory_service_base_url: Optional[str]
     directory_service_timeout_seconds: float
+    # Browser origins allowed to call the service directly; empty disables CORS (gateway-only access)
+    cors_allowed_origins: Tuple[str, ...] = ()
+    # Path prefix the API Gateway strips before forwarding (e.g. "/identity"), so Swagger UI
+    # and OpenAPI links work behind the gateway; empty when the service is called directly
+    root_path: str = ""
 
     @property
     def is_production(self) -> bool:
@@ -56,6 +69,8 @@ class Settings:
         """Refuse to start with an unsupported algorithm or, in production, development-only secrets."""
         if self.jwt_algorithm not in SUPPORTED_JWT_ALGORITHMS:
             raise RuntimeError(f"JWT_ALGORITHM must be one of {SUPPORTED_JWT_ALGORITHMS}.")
+        if self.root_path and (not self.root_path.startswith("/") or self.root_path.endswith("/")):
+            raise RuntimeError("ROOT_PATH must start with '/' and must not end with '/', e.g. /identity.")
         if not self.is_production:
             return
         if self.jwt_algorithm == "HS256" and self.jwt_secret_key == DEVELOPMENT_JWT_SECRET:
@@ -65,6 +80,10 @@ class Settings:
         if self.jwt_algorithm == "RS256" and not (self.jwt_private_key_path and self.jwt_public_key_path):
             raise RuntimeError(
                 "JWT_PRIVATE_KEY_PATH and JWT_PUBLIC_KEY_PATH must be set when ENVIRONMENT=production."
+            )
+        if "*" in self.cors_allowed_origins:
+            raise RuntimeError(
+                "CORS_ALLOWED_ORIGINS must list explicit origins when ENVIRONMENT=production, not '*'."
             )
 
 
@@ -84,6 +103,8 @@ def get_settings() -> Settings:
         log_level=_env("LOG_LEVEL", "INFO"),
         directory_service_base_url=_env("DIRECTORY_SERVICE_BASE_URL"),
         directory_service_timeout_seconds=_env_float("DIRECTORY_SERVICE_TIMEOUT_SECONDS", 3.0),
+        cors_allowed_origins=_env_list("CORS_ALLOWED_ORIGINS"),
+        root_path=_env("ROOT_PATH", ""),
     )
     settings.validate()
     return settings
