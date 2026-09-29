@@ -1,0 +1,59 @@
+# Render Blueprint for the Identity Service: one Docker web service and its Postgres database.
+# Render dashboard -> New -> Blueprint -> pick this repository. Full steps: docs/DEPLOY_RENDER.md
+#
+# Two things the Blueprint cannot do, set them by hand after the first sync:
+#   1. Secret Files: upload jwt_private.pem and jwt_public.pem (scripts/generate_jwt_keys.py)
+#   2. Values marked "sync: false" are asked for once, when the Blueprint is created
+
+databases:
+  - name: identity-db
+    plan: free            # free Render Postgres expires 30 days after creation
+    region: singapore     # must match the web service so it can use the internal connection string
+    databaseName: identity
+    user: identity
+
+services:
+  - type: web
+    name: university-identity-service
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    autoDeployTrigger: commit
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production   # refuses to start without persistent signing keys
+      - key: PORT
+        value: "8001"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: identity-db
+          property: connectionString
+      # Uploaded as Secret Files (Render mounts them under /etc/secrets)
+      - key: JWT_PRIVATE_KEY_PATH
+        value: /etc/secrets/jwt_private.pem
+      - key: JWT_PUBLIC_KEY_PATH
+        value: /etc/secrets/jwt_public.pem
+      - key: JWT_ISSUER
+        value: university-identity-service
+      - key: JWT_AUDIENCE
+        value: university-services-platform
+      # Synthetic demo users for integration testing (idempotent, runs on every start)
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: DEMO_USER_PASSWORD
+        sync: false
+      # The Directory Service's Render URL, e.g. https://university-directory-service.onrender.com
+      - key: DIRECTORY_SERVICE_BASE_URL
+        sync: false
+      # Free services take about a minute to wake from sleep
+      - key: DIRECTORY_SERVICE_TIMEOUT_SECONDS
+        value: "60"
+      # The frontend's URL if browsers call Identity directly; leave empty when all traffic goes through the gateway
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO

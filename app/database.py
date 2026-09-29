@@ -19,7 +19,9 @@ def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    # Hosted Postgres (e.g. Render) closes idle connections; test each one before use
+    pool_pre_ping="sqlite" not in DATABASE_URL,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

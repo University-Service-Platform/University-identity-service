@@ -36,7 +36,7 @@ Faculties, departments, service units, affiliations and service responsibilities
 
 ## 2. Technologies
 
-Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic 2, python-jose (JWT, RS256), bcrypt, httpx, pytest. SQLite by default; any SQLAlchemy database works through `DATABASE_URL`.
+Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic 2, python-jose (JWT, RS256), bcrypt, httpx, pytest. SQLite by default for local work; PostgreSQL (psycopg 3) in hosted environments such as Render. Any SQLAlchemy database works through `DATABASE_URL`.
 
 ## 3. Local setup
 
@@ -55,7 +55,7 @@ python scripts/generate_jwt_keys.py   # optional in development, required in pro
 | Variable | Default | Purpose |
 |---|---|---|
 | `ENVIRONMENT` | `development` | `production` turns on the startup checks below |
-| `DATABASE_URL` | `sqlite:///./identity.db` | Identity DB (owned by this service only) |
+| `DATABASE_URL` | `sqlite:///./identity.db` | Identity DB (owned by this service only). Postgres URLs (`postgres://`, `postgresql://`) are accepted as given by the host |
 | `JWT_ALGORITHM` | `RS256` | `RS256` (recommended) or `HS256` |
 | `JWT_PRIVATE_KEY_PATH` / `JWT_PUBLIC_KEY_PATH` | *(empty)* | RS256 key files. Empty in development means an ephemeral key pair is used; **required in production** |
 | `JWT_SECRET_KEY` | development value | HS256 only; the default is **rejected in production** |
@@ -186,6 +186,8 @@ On start the container runs `alembic upgrade head`, then `python -m app.seed` (w
 
 For persistent RS256 keys, generate them with `scripts/generate_jwt_keys.py`, mount the folder into the container and set `JWT_PRIVATE_KEY_PATH` / `JWT_PUBLIC_KEY_PATH`. Never bake keys into the image.
 
+**Render:** [`render.yaml`](render.yaml) is a Blueprint for the web service plus a Postgres database. Follow [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md) for the steps: signing keys as Secret Files, demo password, checks and free-plan limits.
+
 ## 12. Testing
 
 ```bash
@@ -203,10 +205,13 @@ pytest -q
 | `test_e2e_workflows.py` | Full workflows on a migrated and seeded database |
 | `test_consumer_contracts.py` | Groups 6, 7 and 8 using the documented contract |
 | `test_cors_and_root_path.py` | CORS for browser clients, running behind the gateway with `ROOT_PATH` |
+| `test_database_config.py` | Hosted Postgres URLs are pinned to the psycopg driver |
 
 No test calls a real external service; the Directory Service is replaced by `httpx.MockTransport`.
 
-**CI:** `.github/workflows/ci.yml` runs the test suite on Python 3.12 for every push to `main` or a `feature-*` branch and every pull request to `main`. It then builds the Docker image, starts it with demo data, and checks `/health`, the JWKS and a demo login.
+**On PostgreSQL:** set `TEST_DATABASE_URL` to an empty test database, e.g. `TEST_DATABASE_URL=postgresql://postgres@localhost:5432/identity_test pytest -q`. The tests wipe that database's `public` schema, so never point it at real data. Without the variable, the tests use SQLite files.
+
+**CI:** `.github/workflows/ci.yml` runs the test suite on Python 3.12, on SQLite and on PostgreSQL 17, for every push to `main` or a `feature-*` branch and every pull request to `main`. It then builds the Docker image, starts it with demo data, and checks `/health`, the JWKS and a demo login.
 
 **Postman:** import `docs/postman/identity-service.postman_collection.json` and `docs/postman/identity-service.local.postman_environment.json`, set `demoPassword`, then run the collection. The login request stores the token for the requests that follow, and each request has status-code tests.
 
