@@ -21,7 +21,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import hash_password
 from app.core.time import utc_now
 from app.demo_accounts import PROTECTED_IDENTIFIERS, ensure_not_protected_demo_account
 from app.models.password_reset import PasswordResetToken
@@ -29,6 +28,7 @@ from app.models.user import AccountStatus, User
 from app.repositories.user_repository import UserRepository
 from app.services import audit_service
 from app.services.audit_service import AuditService
+from app.services.credentials import set_new_password
 
 logger = logging.getLogger("identity.password_reset")
 
@@ -139,8 +139,7 @@ class PasswordResetService:
             raise INVALID_RESET_TOKEN
         ensure_not_protected_demo_account(user.id)
 
-        user.password_hash = hash_password(new_password)
-        user.updated_at = now
+        set_new_password(user, new_password)
         # Spend this link and any other open one for the account
         (self.db.query(PasswordResetToken)
          .filter(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
