@@ -2,6 +2,8 @@
 Responsibility-aware eligibility tests. The Directory Service is stubbed with
 httpx.MockTransport via a FastAPI dependency override; no real network calls.
 """
+import re
+
 import httpx
 import pytest
 
@@ -73,12 +75,28 @@ class DirectoryStub:
     def respond_to(self, path, status_code, body):
         self.routes[path] = (status_code, body)
 
+    UNIT_LOOKUP = re.compile(r"/api/v1/validation/(faculties|departments|service-units)/([^/]+)")
+    UNIT_ID_FIELD = {"faculties": "faculty_id", "departments": "department_id", "service-units": "unit_id"}
+
     def handler(self, request):
         self.requests.append(request)
         if self.exception:
             raise self.exception
-        status_code, body = self.routes.get(request.url.path, (self.status_code, self.body))
-        return httpx.Response(status_code, json=body)
+        if request.url.path in self.routes:
+            status_code, body = self.routes[request.url.path]
+            return httpx.Response(status_code, json=body)
+        lookup = self.UNIT_LOOKUP.fullmatch(request.url.path)
+        if lookup:
+            # Unit id-or-code lookups: codes resolve to "<code>-id"; anything starting "nope" doesn't exist
+            kind, identifier = lookup.groups()
+            if identifier.lower().startswith("nope"):
+                return httpx.Response(404, json=error("DEPARTMENT_NOT_FOUND"))
+            unit_id = identifier if "-" in identifier else f"{identifier.lower()}-id"
+            return httpx.Response(200, json={"success": True, "data": {self.UNIT_ID_FIELD[kind]: unit_id}})
+        return httpx.Response(self.status_code, json=self.body)
+
+    def responsibility_requests(self):
+        return [r for r in self.requests if r.url.path.endswith("/responsibilities")]
 
 
 @pytest.fixture
@@ -143,7 +161,7 @@ def test_active_responsibility_makes_staff_eligible(client, db_session, director
     assert data["eligible"] is True
     assert data["checks"]["relationship_satisfied"] is True
     assert data["matched_responsibilities"][0]["role_title"] == "Service Desk Lead"
-    assert dict(directory.requests[0].url.params) == {"service_unit_id": "su-it"}
+    assert dict(directory.responsibility_requests()[0].url.params) == {"service_unit_id": "su-it"}
 
 
 def test_same_role_without_responsibility_is_not_eligible(client, db_session, directory, caller):
@@ -164,6 +182,41 @@ def test_inactive_responsibility_is_reported(client, db_session, directory, call
 
     data = check(client, "usr-elig-staff2", relationship="RESPONSIBILITY", department_id="dep-cs").json()["data"]
     assert data["reasons"] == ["RESPONSIBILITY_INACTIVE"]
+
+
+@pytest.mark.parametrize("params,sent", [
+    ({"department_id": "CS"}, {"department_id": "cs-id"}),                 # code -> Directory id
+    ({"service_unit_id": "ITHD"}, {"service_unit_id": "ithd-id"}),
+    ({"faculty_id": "FSC"}, {"faculty_id": "fsc-id"}),
+    ({"department_id": "dep-cs"}, {"department_id": "dep-cs"}),            # ids pass through the lookup
+])
+def test_responsibility_units_given_as_codes_are_sent_as_ids(client, db_session, directory, caller, params, sent):
+    """The Directory's responsibility filters only accept ids, but consumers store the stable codes."""
+    create_user(db_session, "usr-elig-staff", role="RESOURCE_MANAGER")
+    directory.respond(200, RESPONSIBILITY)
+
+    data = check(client, "usr-elig-staff", relationship="RESPONSIBILITY", **params).json()["data"]
+    assert data["eligible"] is True
+    assert dict(directory.responsibility_requests()[0].url.params) == sent
+
+
+def test_responsibility_for_an_unknown_unit_is_not_eligible(client, db_session, directory, caller):
+    create_user(db_session, "usr-elig-staff", role="RESOURCE_MANAGER")
+    directory.respond(200, RESPONSIBILITY)
+
+    data = check(client, "usr-elig-staff", relationship="RESPONSIBILITY", department_id="NOPE").json()["data"]
+    assert data["eligible"] is False
+    assert data["reasons"] == ["NO_MATCHING_RESPONSIBILITY"]
+    assert directory.responsibility_requests() == []     # no lookup for a unit that doesn't exist
+
+
+def test_unit_lookup_outage_is_503(client, db_session, directory, caller):
+    create_user(db_session, "usr-elig-staff", role="RESOURCE_MANAGER")
+    directory.respond_to("/api/v1/validation/departments/CS", 503, error("IDENTITY_SERVICE_UNAVAILABLE"))
+
+    response = check(client, "usr-elig-staff", relationship="RESPONSIBILITY", department_id="CS")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "DEPENDENCY_UNAVAILABLE"
 
 
 # ---------------------------------------------------------------- affiliation
@@ -277,7 +330,7 @@ def test_caller_token_is_forwarded_to_directory(client, db_session, directory, c
     directory.respond(200, RESPONSIBILITY)
 
     check(client, "usr-elig-staff", relationship="RESPONSIBILITY", service_unit_id="su-it")
-    assert directory.requests[0].headers["Authorization"].startswith("Bearer ")
+    assert all(r.headers["Authorization"].startswith("Bearer ") for r in directory.requests)
 
 
 @pytest.mark.parametrize("params", [

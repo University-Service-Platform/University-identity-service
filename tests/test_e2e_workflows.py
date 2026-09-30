@@ -134,6 +134,9 @@ def test_identity_and_directory_workflow(deployed_client):
 
     def directory(request: httpx.Request) -> httpx.Response:
         seen.append(request)
+        if request.url.path == "/api/v1/validation/service-units/su-it":
+            return httpx.Response(200, json={"success": True, "data": {"unit_id": "su-it", "code": "IT",
+                                                                       "name": "IT Services", "is_valid": True}})
         return httpx.Response(200, json={"success": True, "data": {
             "user_id": "usr-servicedesk-001", "is_valid": True,
             "responsibilities": [{"responsibility_id": "rsp-1", "user_id": "usr-servicedesk-001",
@@ -149,4 +152,5 @@ def test_identity_and_directory_workflow(deployed_client):
         "required_role": "SERVICE_DESK_OFFICER", "relationship": "RESPONSIBILITY", "service_unit_id": "su-it",
     }).json()["data"]
     assert data["eligible"] is True
-    assert seen[0].url.path == "/api/v1/validation/users/usr-servicedesk-001/responsibilities"
+    assert [r.url.path for r in seen] == ["/api/v1/validation/service-units/su-it",
+                                          "/api/v1/validation/users/usr-servicedesk-001/responsibilities"]

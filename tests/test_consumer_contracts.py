@@ -39,9 +39,24 @@ def platform(db_session):
     return db_session
 
 
+DEPARTMENTS = {"dep-cs": "dep-cs", "CS": "dep-cs", "dep-math": "dep-math", "MATH": "dep-math"}
+
+
+def department_lookup(request):
+    """GET /api/v1/validation/departments/{id or code}"""
+    identifier = request.url.path.rsplit("/", 1)[-1]
+    if identifier in DEPARTMENTS:
+        return 200, {"success": True, "data": {"department_id": DEPARTMENTS[identifier], "code": "X", "name": "X",
+                                               "faculty_id": "fac-sci", "faculty_name": "Science", "is_valid": True}}
+    return 404, {"success": False, "error": {"code": "DEPARTMENT_NOT_FOUND", "message": "..."}}
+
+
 def stub_directory(responses):
     """responses: URL path -> (status, json), or a function of the request returning (status, json)"""
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/api/v1/validation/departments/") and request.url.path not in responses:
+            status_code, body = department_lookup(request)
+            return httpx.Response(status_code, json=body)
         answer = responses[request.url.path]
         status_code, body = answer(request) if callable(answer) else answer
         return httpx.Response(status_code, json=body)
@@ -80,6 +95,23 @@ def test_group6_manager_of_another_department_may_not_approve(client, platform):
     allowed, message = group6_can_approve_reservation(client, auth_header("usr-g6-manager"), "usr-g6-manager", "dep-math")
     assert allowed is False
     assert message == "User has no responsibility for the requested organizational unit."
+
+
+def test_group6_approval_with_a_department_code(client, platform):
+    """Group 6 stores department codes; the Identity Service turns them into Directory ids."""
+    seen = []
+
+    def responsibilities(request):
+        seen.append(dict(request.url.params))
+        return 200, {"success": True, "data": {
+            "user_id": "usr-g6-manager", "is_valid": True, "responsibilities": [{
+                "responsibility_id": "rsp-9", "user_id": "usr-g6-manager", "department_id": "dep-cs",
+                "department_name": "Computer Science", "role_title": "Lab Resource Manager", "status": "ACTIVE"}]}}
+
+    stub_directory({"/api/v1/validation/users/usr-g6-manager/responsibilities": responsibilities})
+    allowed, _ = group6_can_approve_reservation(client, auth_header("usr-g6-manager"), "usr-g6-manager", "CS")
+    assert allowed is True
+    assert seen == [{"department_id": "dep-cs"}]
 
 
 def test_group6_unknown_user_gets_documented_404(client, platform):
