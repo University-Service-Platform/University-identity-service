@@ -45,6 +45,7 @@ API_V1_PREFIX = "/api/v1"
 
 DEVELOPMENT_JWT_SECRET = "development_secret_key_change_in_production"
 SUPPORTED_JWT_ALGORITHMS = ("RS256", "HS256")
+EMAIL_PROVIDERS = ("", "brevo", "resend", "log")
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,16 @@ class Settings:
     # Path prefix the API Gateway strips before forwarding (e.g. "/identity"), so Swagger UI
     # and OpenAPI links work behind the gateway; empty when the service is called directly
     root_path: str = ""
+    # Refuse API changes to the shared seeded demo accounts (see app/demo_accounts.py)
+    protect_demo_users: bool = True
+    # Forgot-password emails (app/integrations/email_sender.py). No provider: requests are accepted
+    # but no email goes out. "log" writes the link to the log instead (development only).
+    email_provider: str = ""
+    email_api_key: Optional[str] = None
+    email_from: Optional[str] = None
+    # The frontend page that receives ?token=... and asks for the new password
+    password_reset_url: Optional[str] = None
+    password_reset_token_minutes: int = 30
 
     @property
     def is_production(self) -> bool:
@@ -92,6 +103,15 @@ class Settings:
                 )
         if self.root_path and (not self.root_path.startswith("/") or self.root_path.endswith("/")):
             raise RuntimeError("ROOT_PATH must start with '/' and must not end with '/', e.g. /identity.")
+        if self.email_provider not in EMAIL_PROVIDERS:
+            raise RuntimeError(f"EMAIL_PROVIDER must be one of {sorted(p for p in EMAIL_PROVIDERS if p)} or empty.")
+        if self.email_provider and not self.password_reset_url:
+            raise RuntimeError("PASSWORD_RESET_URL must be set when EMAIL_PROVIDER is set, "
+                               "e.g. https://<frontend>/reset-password.")
+        if self.email_provider in ("brevo", "resend") and not (self.email_api_key and self.email_from):
+            raise RuntimeError(f"EMAIL_API_KEY and EMAIL_FROM must be set when EMAIL_PROVIDER={self.email_provider}.")
+        if self.password_reset_token_minutes < 5:
+            raise RuntimeError("PASSWORD_RESET_TOKEN_MINUTES must be at least 5.")
         if not self.is_production:
             return
         if self.jwt_algorithm == "HS256" and self.jwt_secret_key == DEVELOPMENT_JWT_SECRET:
@@ -102,6 +122,9 @@ class Settings:
             raise RuntimeError(
                 "JWT_PRIVATE_KEY_PATH and JWT_PUBLIC_KEY_PATH must be set when ENVIRONMENT=production."
             )
+        if self.email_provider == "log":
+            raise RuntimeError("EMAIL_PROVIDER=log writes password reset links to the log; "
+                               "use brevo or resend when ENVIRONMENT=production.")
         if "*" in self.cors_allowed_origins:
             raise RuntimeError(
                 "CORS_ALLOWED_ORIGINS must list explicit origins when ENVIRONMENT=production, not '*'."
@@ -126,6 +149,12 @@ def get_settings() -> Settings:
         directory_service_timeout_seconds=_env_float("DIRECTORY_SERVICE_TIMEOUT_SECONDS", 3.0),
         cors_allowed_origins=_env_list("CORS_ALLOWED_ORIGINS"),
         root_path=_env("ROOT_PATH", ""),
+        protect_demo_users=_env("PROTECT_DEMO_USERS", "true").strip().lower() not in ("false", "0", "no"),
+        email_provider=(_env("EMAIL_PROVIDER", "") or "").lower(),
+        email_api_key=_env("EMAIL_API_KEY"),
+        email_from=_env("EMAIL_FROM"),
+        password_reset_url=_env("PASSWORD_RESET_URL"),
+        password_reset_token_minutes=_env_int("PASSWORD_RESET_TOKEN_MINUTES", 30),
     )
     settings.validate()
     return settings

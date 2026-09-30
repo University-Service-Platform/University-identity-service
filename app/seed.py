@@ -16,49 +16,18 @@ All demo data is synthetic. Never load real student or staff records.
 import argparse
 import logging
 import os
-from dataclasses import dataclass
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.database import SessionLocal
+from app.demo_accounts import DEMO_USERS, DemoUser  # noqa: F401  (re-exported for callers)
 from app.models.role import Role, UserRole
-from app.models.user import AccountStatus, AccountType, User
+from app.models.user import User
 from app.reference_data import ensure_reference_data
 
 logger = logging.getLogger("identity.seed")
-
-
-@dataclass(frozen=True)
-class DemoUser:
-    id: str
-    university_id: str
-    name: str
-    account_type: AccountType
-    role: str
-    status: AccountStatus = AccountStatus.ACTIVE
-
-    @property
-    def email(self) -> str:
-        return f"{self.university_id.lower()}@university.example"
-
-
-DEMO_USERS: List[DemoUser] = [
-    DemoUser("usr-admin-001", "ADM001", "Demo System Administrator", AccountType.STAFF, "ADMIN"),
-    DemoUser("usr-staff-001", "STF001", "Demo Staff Member", AccountType.STAFF, "STAFF"),
-    DemoUser("usr-student-001", "STU001", "Demo Student", AccountType.STUDENT, "STUDENT"),
-    DemoUser("usr-student-002", "STU002", "Demo Inactive Student", AccountType.STUDENT, "STUDENT",
-             AccountStatus.INACTIVE),
-    # A second active student, for department checks that need students in different departments
-    DemoUser("usr-student-003", "STU003", "Demo Student (Second Department)", AccountType.STUDENT, "STUDENT"),
-    DemoUser("usr-academic-001", "ACD001", "Demo Academic Staff", AccountType.STAFF, "ACADEMIC_STAFF"),
-    DemoUser("usr-adminstaff-001", "ADS001", "Demo Administrative Staff", AccountType.STAFF, "ADMINISTRATIVE_STAFF"),
-    DemoUser("usr-servicedesk-001", "SDO001", "Demo Service Desk Officer", AccountType.STAFF, "SERVICE_DESK_OFFICER"),
-    DemoUser("usr-technician-001", "TEC001", "Demo Technician", AccountType.STAFF, "TECHNICIAN"),
-    DemoUser("usr-resourcemgr-001", "RMG001", "Demo Resource Manager", AccountType.STAFF, "RESOURCE_MANAGER"),
-    DemoUser("usr-organizer-001", "EVO001", "Demo Event Organizer", AccountType.STAFF, "EVENT_ORGANIZER"),
-]
 
 
 def _role_id(db: Session, name: str) -> Optional[int]:

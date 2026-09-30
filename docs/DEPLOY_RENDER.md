@@ -83,6 +83,30 @@ curl -X POST <url>/api/v1/auth/login \
 Spring services verify tokens with
 `spring.security.oauth2.resourceserver.jwt.jwk-set-uri=<url>/.well-known/jwks.json`.
 
+## 6. Forgot-password emails (optional)
+
+The reset link is emailed through an email API (free Render instances block SMTP). Brevo's free plan
+(300 emails a day) can send to any address after you verify one sender address, so no domain is needed:
+
+1. Sign up at https://www.brevo.com.
+2. **Senders, domains & dedicated IPs** → **Senders** → **Add a sender**: your Gmail (or any) address,
+   then click the confirmation link Brevo emails you.
+3. **SMTP & API** → **API keys** → **Generate a new API key**; copy it.
+4. On Render, **university-identity-service** → **Environment**, add:
+
+   | Key | Value |
+   |---|---|
+   | `EMAIL_PROVIDER` | `brevo` |
+   | `EMAIL_API_KEY` | the key from step 3 |
+   | `EMAIL_FROM` | `University Services <the address verified in step 2>` |
+   | `PASSWORD_RESET_URL` | `https://<frontend>/reset-password` |
+
+5. Save and deploy. Test with an account whose email is a real inbox you can open; the demo accounts'
+   `@university.example` addresses can't receive mail and never get a link.
+
+If a link doesn't arrive, check the spam folder, then the service logs for
+`Password reset email could not be sent`: the line after it gives Brevo's reason.
+
 ## Free plan limits
 
 | Limit | What it means | What to do |

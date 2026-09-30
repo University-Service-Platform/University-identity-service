@@ -62,6 +62,16 @@ class PasswordChangeRequest(BaseModel):
     new_password: Password
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=100,
+                       description="The account's email address (a university ID is accepted too)")
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=20, max_length=200, description="The token from the emailed link")
+    new_password: Password
+
+
 class PasswordSetRequest(BaseModel):
     new_password: Password
 
