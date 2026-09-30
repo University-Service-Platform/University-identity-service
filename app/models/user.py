@@ -27,3 +27,4 @@ class User(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
+    password_reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")

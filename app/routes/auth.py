@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, status
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.security import jwks
@@ -8,17 +11,23 @@ from app.dependencies.auth import require_active_account, require_permission
 from app.models.user import User
 from app.schemas.auth import (
     CurrentIdentityResponse,
+    ForgotPasswordRequest,
     LoginRequest,
     MessageData,
     MessageResponse,
     PasswordChangeRequest,
     PasswordSetRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
+from app.integrations.email_sender import EmailSender, get_email_sender
+from app.services.password_reset_service import PasswordResetService, ResetEmail
 from app.services import audit_service
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.user_management_service import UserManagementService
+
+logger = logging.getLogger("identity.auth")
 
 router = APIRouter(tags=["Authentication"])
 
@@ -53,6 +62,54 @@ def get_current_identity(
     current_user: User = Depends(require_active_account)
 ):
     return CurrentIdentityResponse(success=True, data=AuthService(db).current_identity(current_user))
+
+
+RESET_REQUESTED_MESSAGE = ("If an account with that email exists, we've sent a link to reset its password. "
+                           "Check your inbox and spam folder.")
+
+
+def _send_reset_email(sender: EmailSender, email: ResetEmail) -> None:
+    try:
+        sender.send(email.to, email.subject, email.text, email.html)
+    except Exception:  # a failed email must never surface to the requester
+        logger.exception("Password reset email could not be sent")
+
+
+@router.post(
+    "/auth/forgot-password",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Forgot Password",
+    description="Email a one-time link for setting a new password. Always answers the same way, whether or not "
+                "the account exists, so it can't be used to discover accounts. Public (no token)."
+)
+def forgot_password(
+    body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    sender: Optional[EmailSender] = Depends(get_email_sender),
+):
+    email = PasswordResetService(db).request_reset(body.email)
+    if email is not None:
+        if sender is None:
+            logger.warning("EMAIL_PROVIDER is not set, so the password reset email was not sent")
+        else:
+            # Sent after the response, so the response time doesn't show whether the account exists
+            background_tasks.add_task(_send_reset_email, sender, email)
+    return MessageResponse(success=True, data=MessageData(message=RESET_REQUESTED_MESSAGE))
+
+
+@router.post(
+    "/auth/reset-password",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reset Password",
+    description="Set a new password with the token from the emailed link. The link works once. "
+                "Invalid, used or expired links get 400 INVALID_RESET_TOKEN. Public (no token)."
+)
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    PasswordResetService(db).reset_password(body.token, body.new_password)
+    return MessageResponse(success=True, data=MessageData(message="Your password has been changed. You can sign in now."))
 
 
 @router.post(

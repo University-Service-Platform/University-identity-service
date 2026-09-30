@@ -69,6 +69,11 @@ python scripts/generate_jwt_keys.py   # optional in development, required in pro
 | `DEMO_USER_PASSWORD` | *(empty)* | Password given to seeded demo users |
 | `SEED_DEMO_DATA` | `false` | Container only: seed demo users on start |
 | `PROTECT_DEMO_USERS` | `true` | Refuse API changes to the 11 shared demo accounts (403 `DEMO_ACCOUNT_PROTECTED`), so one tester can't break everyone's logins. Set `false` to allow them |
+| `EMAIL_PROVIDER` | *(empty)* | Sends forgot-password emails: `brevo` or `resend` (HTTPS APIs; free Render blocks SMTP), or `log` to write the link to the log in development. Empty: requests are accepted but no email is sent |
+| `EMAIL_API_KEY` | – | The provider's API key |
+| `EMAIL_FROM` | – | Sender, `Name <address>` or an address the provider has verified |
+| `PASSWORD_RESET_URL` | – | The frontend page that receives `?token=…`, e.g. `https://<frontend>/reset-password` |
+| `PASSWORD_RESET_TOKEN_MINUTES` | `30` | How long a reset link works |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## 5. Database setup and migrations
@@ -133,6 +138,7 @@ All endpoints below are under **`/api/v1`**. Responses use `{"success": true, "d
 | Auth | `POST /auth/login` | Public |
 | | `GET /auth/me` | Any active user |
 | | `POST /auth/change-password` | Any active user |
+| | `POST /auth/forgot-password` · `POST /auth/reset-password` (emailed one-time link) | Public |
 | Users | `POST /users` · `PUT /users/{id}` · `DELETE /users/{id}` | ADMIN |
 | | `GET /users` | ADMIN, STAFF |
 | | `GET /users/{id}` (profile + directory affiliation) | Self, ADMIN, STAFF |
