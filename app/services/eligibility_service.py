@@ -163,8 +163,20 @@ class EligibilityService:
         )
 
     def _check_responsibility(self, user_id, service_unit_id, department_id, faculty_id, reasons):
+        # The Directory's responsibility filters take ids only; callers may send ids or codes
+        unit_ids = {}
+        for kind, identifier in (("service_unit", service_unit_id), ("department", department_id),
+                                 ("faculty", faculty_id)):
+            if identifier:
+                unit_id = self.directory.resolve_unit_id(kind, identifier)
+                if unit_id is None:   # no such unit, so no responsibility for it either
+                    reasons.append(EligibilityReason.NO_MATCHING_RESPONSIBILITY)
+                    return False, []
+                unit_ids[kind] = unit_id
+
         result = self.directory.get_user_responsibilities(
-            user_id, service_unit_id=service_unit_id, department_id=department_id, faculty_id=faculty_id
+            user_id, service_unit_id=unit_ids.get("service_unit"), department_id=unit_ids.get("department"),
+            faculty_id=unit_ids.get("faculty"),
         )
         if result.outcome == ResponsibilityOutcome.NONE:
             reasons.append(EligibilityReason.NO_MATCHING_RESPONSIBILITY)

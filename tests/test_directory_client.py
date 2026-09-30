@@ -219,3 +219,34 @@ def test_user_id_is_url_encoded():
     seen = []
     client_returning(404, error("AFFILIATION_NOT_FOUND"), seen=seen).get_user_affiliation("../admin")
     assert seen[0].url.raw_path == b"/api/v1/affiliations/users/..%2Fadmin"
+
+
+# ---------------------------------------------------------------- unit id-or-code lookup
+
+@pytest.mark.parametrize("kind,path,field", [
+    ("department", "/api/v1/validation/departments/CS", "department_id"),
+    ("faculty", "/api/v1/validation/faculties/CS", "faculty_id"),
+    ("service_unit", "/api/v1/validation/service-units/CS", "unit_id"),
+])
+def test_unit_code_resolves_to_its_directory_id(kind, path, field):
+    seen = []
+    client = client_returning(200, {"success": True, "data": {field: "unit-cs-1a2b3c", "code": "CS"}}, seen=seen)
+    assert client.resolve_unit_id(kind, "CS") == "unit-cs-1a2b3c"
+    assert seen[0].url.path == path
+
+
+@pytest.mark.parametrize("status_code,code", [
+    (404, "DEPARTMENT_NOT_FOUND"), (404, "FACULTY_NOT_FOUND"), (404, "SERVICE_UNIT_NOT_FOUND"),
+    (400, "INVALID_IDENTIFIER_FORMAT"), (400, "INVALID_ORGANIZATIONAL_RELATIONSHIP"),
+])
+def test_unknown_unit_resolves_to_none(status_code, code):
+    assert client_returning(status_code, error(code)).resolve_unit_id("department", "NOPE") is None
+
+
+@pytest.mark.parametrize("status_code,body", [
+    (200, {"success": True, "data": {"code": "CS"}}),        # id missing
+    (404, error("SOMETHING_ELSE")),
+])
+def test_unexpected_unit_lookup_answers_raise_directory_error(status_code, body):
+    with pytest.raises(DirectoryServiceError):
+        client_returning(status_code, body).resolve_unit_id("department", "CS")

@@ -271,9 +271,11 @@ This implements the platform's key business rule: *not every staff member has th
 | `user_id` (path) | yes | Internal or university ID |
 | `required_role` | no | Role the user must hold |
 | `relationship` | when a unit is given | `AFFILIATION`: the user **belongs to** the department or faculty (e.g. a student's department); all of the user's affiliations are checked, so a student in two departments is eligible for both. `RESPONSIBILITY`: the user **is responsible for** the unit (e.g. a service desk or resource manager) |
-| `department_id` | no | Directory department ID (`AFFILIATION` also accepts the department **code**) |
-| `faculty_id` | no | Directory faculty ID (`AFFILIATION` also accepts the faculty **code**) |
-| `service_unit_id` | no | Directory service unit ID (`RESPONSIBILITY` only) |
+| `department_id` | no | Directory department ID or **code** (e.g. `CS`) |
+| `faculty_id` | no | Directory faculty ID or **code** (e.g. `FSC`) |
+| `service_unit_id` | no | Directory service unit ID or **code** (`RESPONSIBILITY` only) |
+
+**Store codes, not ids.** Codes stay the same in every environment; Directory ids don't. Both relationships accept either; for `RESPONSIBILITY` the Identity Service looks the code up in the Directory first, and an unknown unit gives `NO_MATCHING_RESPONSIBILITY`.
 
 **Response fields:**
 - `eligible` is `true` only when **every** requested check passes.
@@ -481,6 +483,7 @@ The unversioned routes (`/users…`, `/validation/users/{id}`, `/protected/*`) s
 
 | Version | Change |
 |---|---|
+| v1 | `RESPONSIBILITY` eligibility accepts department, faculty and service-unit **codes** as well as ids (the Directory's responsibility filters take ids only, so codes are looked up first). No breaking changes. |
 | v1 | Affiliation eligibility checks all of a user's affiliations (a student in two departments was rejected for the second). The Identity Service now calls the Directory's `/api/v1` endpoints. No API changes. |
 | v1 | Hosted on Render: `https://university-identity-service.onrender.com` (PostgreSQL, persistent signing keys). No API changes. |
 | v1 | Initial versioned contract: login and JWT (RS256, JWKS), `/auth/me`, user/role validation, eligibility (affiliation and responsibility), role catalogue, audit log, standard error envelope. Sprint 1 routes kept as deprecated aliases. |

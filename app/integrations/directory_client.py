@@ -7,6 +7,8 @@ documented Directory endpoints (versioned under /api/v1):
     GET /api/v1/validation/users/{user_id}/responsibilities
     GET /api/v1/validation/users/{user_id}/affiliation   (all of a user's affiliations)
     GET /api/v1/affiliations/users/{user_id}             (the user's primary affiliation)
+    GET /api/v1/validation/{faculties|departments|service-units}/{id or code}
+                                                         (turns a unit code into its id)
 
 Failures are translated into two exceptions so callers never leak downstream
 details to their own clients:
@@ -33,6 +35,21 @@ _NO_MATCHING_AFFILIATION = {
     (404, "AFFILIATION_NOT_FOUND"),
     (404, "DEPARTMENT_NOT_FOUND"),
     (404, "FACULTY_NOT_FOUND"),
+    (400, "INVALID_ORGANIZATIONAL_RELATIONSHIP"),
+}
+
+# Unit kind -> (validation path segment, field holding the unit's id in the answer)
+_UNIT_VALIDATION = {
+    "faculty": ("faculties", "faculty_id"),
+    "department": ("departments", "department_id"),
+    "service_unit": ("service-units", "unit_id"),
+}
+# Answers meaning "no such unit" (unknown id or code, or an identifier the Directory can't accept)
+_UNKNOWN_UNIT = {
+    (404, "FACULTY_NOT_FOUND"),
+    (404, "DEPARTMENT_NOT_FOUND"),
+    (404, "SERVICE_UNIT_NOT_FOUND"),
+    (400, "INVALID_IDENTIFIER_FORMAT"),
     (400, "INVALID_ORGANIZATIONAL_RELATIONSHIP"),
 }
 
@@ -130,6 +147,23 @@ class DirectoryClient:
         if response.status_code == 403 and error_code == "RESPONSIBILITY_INACTIVE":
             return ResponsibilityCheck(outcome=ResponsibilityOutcome.INACTIVE)
         raise self._contract_error("responsibility status", response)
+
+    def resolve_unit_id(self, kind: str, identifier: str) -> Optional[str]:
+        """
+        The Directory id of a faculty, department or service unit given by id or code, or None when
+        the unit does not exist. Needed because the responsibility filters only accept ids, while
+        consumers are told to store the stable codes.
+        """
+        segment, id_field = _UNIT_VALIDATION[kind]
+        response = self._get(f"{DIRECTORY_API_PREFIX}/validation/{segment}/{quote(identifier, safe='')}")
+        if response.status_code == 200:
+            unit_id = self._data(response).get(id_field)
+            if not isinstance(unit_id, str) or not unit_id:
+                raise self._contract_error(f"{kind} validation payload", response)
+            return unit_id
+        if (response.status_code, self._error_code(response)) in _UNKNOWN_UNIT:
+            return None
+        raise self._contract_error(f"{kind} validation status", response)
 
     def find_user_affiliations(
         self,
