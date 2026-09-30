@@ -100,6 +100,7 @@ An `identity.db` created by Sprint 1 code (before migrations existed) must be ma
 | STF001 | STAFF | |
 | STU001 | STUDENT | |
 | STU002 | STUDENT | **Inactive** (for testing rejection) |
+| STU003 | STUDENT | Second active student, for tests that need students in different departments |
 | ACD001 | ACADEMIC_STAFF | |
 | ADS001 | ADMINISTRATIVE_STAFF | |
 | SDO001 | SERVICE_DESK_OFFICER | |
