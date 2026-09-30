@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 from app.models.user import AccountType, AccountStatus
 from app.schemas.auth import Password
+from app.schemas.names import NameParts
 
 class UserBase(BaseModel):
     university_id: str = Field(..., min_length=3, max_length=50, description="University ID, e.g. STU001 or STF001")
@@ -23,7 +24,7 @@ class UserUpdate(BaseModel):
 class UserStatusUpdate(BaseModel):
     status: AccountStatus = Field(..., description="Target account status: ACTIVE or INACTIVE")
 
-class UserResponse(UserBase):
+class UserResponse(UserBase, NameParts):
     id: str
     status: AccountStatus
     created_at: datetime

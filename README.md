@@ -135,6 +135,7 @@ All endpoints below are under **`/api/v1`**. Responses use `{"success": true, "d
 | Users | `POST /users` · `PUT /users/{id}` · `DELETE /users/{id}` | ADMIN |
 | | `GET /users` | ADMIN, STAFF |
 | | `GET /users/{id}` (profile + directory affiliation) | Self, ADMIN, STAFF |
+| | `GET /users/profile` · `PUT /users/profile` (own profile; PUT changes the name only) | Any active user |
 | | `PATCH /users/{id}/status` | ADMIN |
 | | `PUT /users/{id}/password` | `users:manage` |
 | Roles | `GET /users/{id}/role` | Any active user |

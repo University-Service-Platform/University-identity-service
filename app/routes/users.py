@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, Request, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.integrations.directory_client import DirectoryClient, get_directory_client
 from app.services.profile_access_service import ProfileAccessService
 from app.services.user_management_service import UserManagementService
-from app.schemas.profile import UserProfileResponse
+from app.schemas.profile import OwnProfileUpdate, UserProfileResponse
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
@@ -56,6 +56,55 @@ def list_users(
     service = UserManagementService(db)
     users_data = service.list_users(skip=skip, limit=limit)
     return UserListResponse(success=True, data=users_data)
+
+# /users/profile must be declared before /users/{user_id}, or "profile" would be read as a user ID
+@router.get(
+    "/users/profile",
+    response_model=UserProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Own Profile",
+    description="The authenticated user's own profile, same shape as GET /users/{user_id}."
+)
+def get_own_profile(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_account),
+    directory: DirectoryClient = Depends(get_directory_client)
+):
+    service = ProfileAccessService(db, directory.with_authorization(request.headers.get("Authorization")))
+    return UserProfileResponse(success=True, data=service.get_user_profile(current_user.id, current_user))
+
+@router.put(
+    "/users/profile",
+    response_model=UserProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update Own Profile",
+    description="Change your own name (name, or first_name + last_name). The email can only be changed by an "
+                "administrator, so a different email is refused with 403 EMAIL_CHANGE_NOT_ALLOWED. "
+                "phone is accepted but not stored."
+)
+def update_own_profile(
+    request: Request,
+    profile_in: OwnProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_active_account),
+    directory: DirectoryClient = Depends(get_directory_client)
+):
+    if profile_in.email is not None and str(profile_in.email).strip().lower() != current_user.email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"success": False, "error": {
+                "code": "EMAIL_CHANGE_NOT_ALLOWED",
+                "message": "Your email is your login identifier; ask an administrator to change it."}}
+        )
+    name = profile_in.full_name()
+    if name:
+        UserManagementService(db).update_user(current_user.id, UserUpdate(name=name))
+        AuditService(db).record(current_user.id, audit_service.USER_UPDATED, "USER", current_user.id,
+                                {"changed_fields": ["name"], "self_service": True})
+        db.refresh(current_user)
+    service = ProfileAccessService(db, directory.with_authorization(request.headers.get("Authorization")))
+    return UserProfileResponse(success=True, data=service.get_user_profile(current_user.id, current_user))
 
 @router.get(
     "/users/{user_id}",

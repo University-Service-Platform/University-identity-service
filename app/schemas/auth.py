@@ -4,6 +4,7 @@ from pydantic import AfterValidator, BaseModel, Field
 
 from app.core.security import BCRYPT_MAX_PASSWORD_BYTES
 from app.models.user import AccountStatus, AccountType
+from app.schemas.names import NameParts
 
 
 def _check_password_bytes(value: str) -> str:
@@ -39,7 +40,7 @@ class TokenResponse(BaseModel):
     data: TokenData
 
 
-class CurrentIdentityData(BaseModel):
+class CurrentIdentityData(NameParts):
     user_id: str
     university_id: str
     name: str
