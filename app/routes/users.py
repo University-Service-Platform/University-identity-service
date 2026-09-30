@@ -14,7 +14,8 @@ from app.schemas.user import (
     UserListResponse
 )
 from app.dependencies.auth import require_active_account, RoleChecker
-from app.models.user import User
+from app.models.user import AccountStatus, User
+from app.services.admin_guard import ensure_admin_remains, ensure_not_self
 from app.services import audit_service
 from app.services.audit_service import AuditService
 
@@ -163,6 +164,9 @@ def update_user_status(
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
     ensure_not_protected_demo_account(user_id)
+    if status_in.status == AccountStatus.INACTIVE:
+        ensure_not_self(current_user, user_id, "deactivate")
+        ensure_admin_remains(db, user_id)
     service = UserManagementService(db)
     updated_user = service.update_user_status(user_id=user_id, new_status=status_in.status)
     AuditService(db).record(
@@ -183,6 +187,8 @@ def delete_user(
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
     ensure_not_protected_demo_account(user_id)
+    ensure_not_self(current_user, user_id, "delete")
+    ensure_admin_remains(db, user_id)
     service = UserManagementService(db)
     deleted = service.delete_user(user_id=user_id)
     AuditService(db).record(

@@ -23,6 +23,11 @@ class User(Base):
     status = Column(SQLEnum(AccountStatus), default=AccountStatus.ACTIVE, nullable=False)
     # bcrypt hash; NULL means no password has been set and the account cannot log in yet
     password_hash = Column(String(255), nullable=True)
+    # Tokens issued before this moment are refused (set whenever the password changes)
+    password_changed_at = Column(DateTime, nullable=True)
+    # Sign-in lockout after repeated wrong passwords
+    failed_login_count = Column(Integer, default=0, server_default="0", nullable=False)
+    locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 

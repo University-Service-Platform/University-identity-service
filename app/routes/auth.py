@@ -117,7 +117,8 @@ def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
     response_model=MessageResponse,
     status_code=status.HTTP_200_OK,
     summary="Change Own Password",
-    description="Change the authenticated user's password. Requires the current password."
+    description="Change the authenticated user's password. Requires the current password. Every session that "
+                "started before the change, this one included, must sign in again (401 SESSION_EXPIRED)."
 )
 def change_password(
     body: PasswordChangeRequest,

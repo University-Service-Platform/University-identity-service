@@ -152,7 +152,7 @@ All endpoints below are under **`/api/v1`**. Responses use `{"success": true, "d
 | | `GET /validation/users/{id}/eligibility` | Token of any active user |
 | Audit | `GET /audit-logs` | `audit:read` |
 
-The Sprint 1 unversioned paths (`/users`, `/validation/users/{id}`, `/protected/*`) still work as **deprecated aliases**. They are marked deprecated in OpenAPI and return `Deprecation: true` plus a `Link` header naming the successor endpoint.
+The Sprint 1 unversioned paths (`/users`, `/validation/users/{id}`, `/protected/*`) still work as **deprecated aliases**. They are hidden from OpenAPI and return `Deprecation: true` plus a `Link` header naming the successor endpoint.
 
 ## 8. Authentication
 
@@ -163,6 +163,9 @@ The Sprint 1 unversioned paths (`/users`, `/validation/users/{id}`, `/protected/
 - Tokens are **RS256**-signed. The public key is at `/.well-known/jwks.json`, so the API Gateway and other services can **verify** tokens but cannot **issue** them.
 - **Claims:** `sub` (user ID), `university_id`, `account_type`, `roles`, `iss`, `aud`, `iat`, `exp`.
 - The `roles` claim is a snapshot taken at login. Use it for routing and UI, and use the validation APIs for authorization decisions.
+- **Lockout:** 5 wrong passwords in a row lock the account for 15 minutes (`429 ACCOUNT_LOCKED`, recorded in the audit log). A correct sign-in resets the count, and a password reset lifts the lock. The shared demo accounts are exempt, so nobody can lock every tester out.
+- **Password changes end sessions:** after a password change, reset or administrator reset, tokens issued earlier get `401 SESSION_EXPIRED` from the Identity Service. Other services verify tokens themselves with the JWKS, so to them an old token stays valid until it expires (60 minutes at most).
+- **Administrators:** an administrator can't delete or deactivate their own account (`400 CANNOT_CHANGE_OWN_ACCOUNT`), and the last active ADMIN can't be deleted, deactivated or demoted (`409 LAST_ADMIN`).
 
 ## 9. Authorization
 

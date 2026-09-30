@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Optional, List
 
 from app.core.security import decode_token, encode_token
+from app.services.credentials import issued_before_password_change
 from app.database import get_db
 from app.models.user import User, AccountStatus
 from app.repositories.permission_repository import PermissionRepository
@@ -76,6 +77,20 @@ def get_current_user(
                     "message": "Authenticated user no longer exists."
                 }
             }
+        )
+
+    # A password change signs out every session that started before it
+    if issued_before_password_change(user, payload.get("iat")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "SESSION_EXPIRED",
+                    "message": "Your password was changed. Please sign in again."
+                }
+            },
+            headers={"WWW-Authenticate": "Bearer"}
         )
 
     return user

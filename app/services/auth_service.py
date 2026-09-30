@@ -2,12 +2,15 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import burn_password_check, encode_token, hash_password, verify_password
-from app.core.time import utc_now
+from app.core.security import burn_password_check, encode_token, verify_password
 from app.models.user import AccountStatus, User
 from app.repositories.permission_repository import PermissionRepository
 from app.repositories.user_repository import UserRepository
+from app.demo_accounts import is_protected_demo_account
 from app.schemas.auth import CurrentIdentityData, TokenData
+from app.services import audit_service
+from app.services.audit_service import AuditService
+from app.services.credentials import LOCKOUT_DURATION, is_locked, record_failed_login, set_new_password
 from app.services.user_lookup import effective_role_names
 
 INVALID_CREDENTIALS = HTTPException(
@@ -20,6 +23,19 @@ INVALID_CREDENTIALS = HTTPException(
         }
     },
     headers={"WWW-Authenticate": "Bearer"}
+)
+
+
+ACCOUNT_LOCKED = HTTPException(
+    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+    detail={
+        "success": False,
+        "error": {
+            "code": "ACCOUNT_LOCKED",
+            "message": f"Too many wrong passwords. Try again in {int(LOCKOUT_DURATION.total_seconds() // 60)} minutes, "
+                       "or reset your password."
+        }
+    }
 )
 
 
@@ -57,8 +73,23 @@ class AuthService:
         if not user:
             burn_password_check()
             raise INVALID_CREDENTIALS
+        # Shared demo accounts are exempt, or anyone could lock every tester out of them
+        lockout_applies = not is_protected_demo_account(user.id)
+        if lockout_applies and is_locked(user):
+            burn_password_check()
+            raise ACCOUNT_LOCKED
         if not verify_password(password, user.password_hash):
+            if lockout_applies:
+                locked_now = record_failed_login(user)
+                self.repository.update(user)
+                if locked_now:
+                    AuditService(self.repository.db).record(user.id, audit_service.ACCOUNT_LOCKED, "USER", user.id)
+                    raise ACCOUNT_LOCKED
             raise INVALID_CREDENTIALS
+        if user.failed_login_count or user.locked_until:
+            user.failed_login_count = 0
+            user.locked_until = None
+            self.repository.update(user)
 
         if user.status != AccountStatus.ACTIVE:
             raise HTTPException(
@@ -110,6 +141,5 @@ class AuthService:
                     }
                 }
             )
-        user.password_hash = hash_password(new_password)
-        user.updated_at = utc_now()
+        set_new_password(user, new_password)
         self.repository.update(user)

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.demo_accounts import ensure_not_protected_demo_account
+from app.services.admin_guard import ADMIN_ROLE, ensure_admin_remains
 from app.database import get_db
 from app.services.role_identification_service import RoleIdentificationService
 from app.services.role_assignment_service import RoleAssignmentService
@@ -69,6 +70,8 @@ def update_user_role(
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
     ensure_not_protected_demo_account(user_id)
+    if role_in.old_role_name.strip().upper() == ADMIN_ROLE and role_in.new_role_name.strip().upper() != ADMIN_ROLE:
+        ensure_admin_remains(db, user_id)
     service = RoleAssignmentService(db)
     update_data = service.update_user_role(
         user_id=user_id,
@@ -96,6 +99,8 @@ def revoke_user_role(
 ):
     service = RoleAssignmentService(db)
     ensure_not_protected_demo_account(user_id)
+    if role_name.strip().upper() == ADMIN_ROLE:
+        ensure_admin_remains(db, user_id)
     revocation_data = service.revoke_role(user_id=user_id, role_name=role_name)
     AuditService(db).record(
         current_user.id, audit_service.ROLE_REVOKED, "USER", revocation_data.user_id,

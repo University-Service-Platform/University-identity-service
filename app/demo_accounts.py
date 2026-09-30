@@ -51,9 +51,13 @@ PROTECTED_IDENTIFIERS: FrozenSet[str] = frozenset(
 )
 
 
+def is_protected_demo_account(identifier: str) -> bool:
+    return get_settings().protect_demo_users and identifier.strip().lower() in PROTECTED_IDENTIFIERS
+
+
 def ensure_not_protected_demo_account(identifier: str) -> None:
     """Refuse (403 DEMO_ACCOUNT_PROTECTED) to change a shared demo account while protection is on."""
-    if get_settings().protect_demo_users and identifier.strip().lower() in PROTECTED_IDENTIFIERS:
+    if is_protected_demo_account(identifier):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"success": False, "error": {

@@ -8,7 +8,9 @@ from app.core.time import utc_now
 from app.models.user import User, AccountStatus
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.services.credentials import set_new_password
 from app.services.user_lookup import effective_role_names, find_user_or_404, require_valid_identifier
+
 
 class UserManagementService:
     def __init__(self, db: Session):
@@ -115,8 +117,7 @@ class UserManagementService:
 
     def set_password(self, user_id: str, new_password: str) -> User:
         user = find_user_or_404(self.repository, user_id)
-        user.password_hash = hash_password(new_password)
-        user.updated_at = utc_now()
+        set_new_password(user, new_password)
         return self.repository.update(user)
 
     def update_user_status(self, user_id: str, new_status: AccountStatus) -> UserResponse:
