@@ -101,3 +101,20 @@ def test_update_to_already_assigned_role_returns_conflict(client, db_session):
     )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "ROLE_ALREADY_ASSIGNED"
+
+
+def test_demo_data_has_two_active_students(migrated_db_url):
+    """Department-restricted checks (e.g. Group 8 events) need students in two different departments."""
+    command.upgrade(alembic_config(migrated_db_url), "head")
+    session = sessionmaker(bind=create_engine(migrated_db_url))()
+    try:
+        ensure_reference_data(session)
+        seed_demo_users(session, "Demo-Passw0rd!")
+        from app.models.user import AccountStatus, User
+        active_students = {
+            u.university_id for u in session.query(User).all()
+            if u.status == AccountStatus.ACTIVE and [ur.role.name for ur in u.roles] == ["STUDENT"]
+        }
+        assert {"STU001", "STU003"} <= active_students
+    finally:
+        session.close()

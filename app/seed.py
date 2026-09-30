@@ -50,6 +50,8 @@ DEMO_USERS: List[DemoUser] = [
     DemoUser("usr-student-001", "STU001", "Demo Student", AccountType.STUDENT, "STUDENT"),
     DemoUser("usr-student-002", "STU002", "Demo Inactive Student", AccountType.STUDENT, "STUDENT",
              AccountStatus.INACTIVE),
+    # A second active student, for department checks that need students in different departments
+    DemoUser("usr-student-003", "STU003", "Demo Student (Second Department)", AccountType.STUDENT, "STUDENT"),
     DemoUser("usr-academic-001", "ACD001", "Demo Academic Staff", AccountType.STAFF, "ACADEMIC_STAFF"),
     DemoUser("usr-adminstaff-001", "ADS001", "Demo Administrative Staff", AccountType.STAFF, "ADMINISTRATIVE_STAFF"),
     DemoUser("usr-servicedesk-001", "SDO001", "Demo Service Desk Officer", AccountType.STAFF, "SERVICE_DESK_OFFICER"),
