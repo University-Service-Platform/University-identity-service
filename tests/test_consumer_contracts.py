@@ -6,6 +6,8 @@ it is a breaking change for that team and must be announced before release.
   Group 6 (reservations)      - may this user approve reservations for this department?
   Group 7 (work orders)       - is this user an active technician?
   Group 8 (events)            - may this student register for a department-only event?
+                                - may this user register for an event open to several roles?
+                                - may this user register for a faculty-only event (no required_role)?
 """
 import httpx
 import pytest
@@ -31,6 +33,9 @@ def platform(db_session):
     create_user(db_session, "usr-g7-tech", role="TECHNICIAN")
     create_user(db_session, "usr-g7-tech-off", role="TECHNICIAN", status=AccountStatus.INACTIVE)
     create_user(db_session, "usr-g8-student", role="STUDENT", account_type=AccountType.STUDENT)
+    create_user(db_session, "usr-g8-academic", role="ACADEMIC_STAFF")
+    create_user(db_session, "usr-g8-student-off", role="STUDENT", account_type=AccountType.STUDENT,
+                status=AccountStatus.INACTIVE)
     return db_session
 
 
@@ -136,6 +141,74 @@ def test_group8_department_only_event_registration(client, platform):
     assert other_department["eligible"] is False
     # Group 8 must show ineligible users a clear explanation
     assert other_department["message"] == "User is not affiliated with the requested department/faculty."
+
+
+# Group 8 event-service, as described by Group 8 (30 September 2026). It never sends required_role:
+# it reads the user's roles and checks them against the event's allowed roles itself.
+
+def group8_role_only_event_allows(client, token_headers, user_id, allowed_roles):
+    response = client.get(f"/api/v1/validation/users/{user_id}", headers=token_headers)
+    if response.status_code != 200:
+        return False
+    data = response.json()["data"]
+    return data["is_valid"] and any(role in allowed_roles for role in data["roles"])
+
+
+def group8_unit_event_allows(client, token_headers, user_id, allowed_roles=None, **unit):
+    response = client.get(f"/api/v1/validation/users/{user_id}/eligibility", headers=token_headers,
+                          params={"relationship": "AFFILIATION", **unit})
+    if response.status_code != 200:
+        return False, response.status_code
+    data = response.json()["data"]
+    role_ok = not allowed_roles or any(role in allowed_roles for role in data["roles"])
+    return data["eligible"] and role_ok, 200
+
+
+@pytest.mark.parametrize("user_id,allowed", [
+    ("usr-g8-student", True),        # STUDENT is one of the allowed roles
+    ("usr-g8-academic", True),       # so is ACADEMIC_STAFF
+    ("usr-g7-tech", False),          # TECHNICIAN is not
+    ("usr-g8-student-off", False),   # right role, but the account is inactive
+])
+def test_group8_event_open_to_several_roles(client, platform, user_id, allowed):
+    headers = auth_header("usr-g8-student")   # the registering user's own token is forwarded
+    assert group8_role_only_event_allows(client, headers, user_id, {"STUDENT", "ACADEMIC_STAFF"}) is allowed
+
+
+def test_group8_faculty_only_event_without_required_role(client, platform):
+    def affiliation_validation(request):
+        if request.url.params.get("faculty_id") == "SCI":
+            return 200, {"success": True, "data": {"user_id": "usr-g8-student", "is_valid": True, "affiliations": [{
+                "affiliation_id": "aff-3",
+                "department": {"id": "dep-cs", "code": "CS", "name": "Computer Science"},
+                "faculty": {"id": "fac-sci", "code": "SCI", "name": "Faculty of Science"}}]}}
+        return 404, {"success": False, "error": {"code": "AFFILIATION_NOT_FOUND", "message": "..."}}
+
+    stub_directory({
+        "/api/v1/validation/users/usr-g8-student/affiliation": affiliation_validation,
+        "/api/v1/affiliations/users/usr-g8-student": (200, {"success": True, "data": {
+            "id": "aff-3", "user_id": "usr-g8-student", "department_id": "dep-cs", "department_name": "Computer Science",
+            "department_code": "CS", "faculty_id": "fac-sci", "faculty_name": "Faculty of Science",
+            "faculty_code": "SCI", "created_at": "2026-09-01T10:00:00"}}),
+    })
+    headers = auth_header("usr-g8-student")
+
+    assert group8_unit_event_allows(client, headers, "usr-g8-student", faculty_id="SCI") == (True, 200)
+    assert group8_unit_event_allows(client, headers, "usr-g8-student", {"STUDENT"}, faculty_id="SCI") == (True, 200)
+    # Right faculty, but the event only lists roles the user doesn't hold
+    assert group8_unit_event_allows(client, headers, "usr-g8-student", {"ACADEMIC_STAFF"}, faculty_id="SCI") == (False, 200)
+    assert group8_unit_event_allows(client, headers, "usr-g8-student", faculty_id="HUM") == (False, 200)
+
+
+def test_group8_directory_outage_refuses_registration(client, platform):
+    def down(request):
+        raise httpx.ConnectError("refused")
+    app.dependency_overrides[get_directory_client] = lambda: DirectoryClient(
+        "http://directory.test", 1.0, transport=httpx.MockTransport(down))
+
+    allowed, status = group8_unit_event_allows(client, auth_header("usr-g8-student"), "usr-g8-student",
+                                               department_id="CS")
+    assert (allowed, status) == (False, 503)   # Group 8 maps this to 503 GROUP5_UNAVAILABLE
 
 
 # ---------------------------------------------------------------- response shapes
