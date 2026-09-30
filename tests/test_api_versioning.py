@@ -88,9 +88,9 @@ def test_v1_validation_role_check_and_error_cases(client, db_session, admin):
     assert unknown.json()["error"]["code"] == "USER_NOT_FOUND"
 
 
-def test_openapi_marks_every_legacy_operation_deprecated(client):
+def test_openapi_documents_only_the_versioned_api(client):
     paths = client.get("/openapi.json").json()["paths"]
     for path, operations in paths.items():
+        assert path.startswith("/api/v1/") or path in ("/health", "/.well-known/jwks.json"), path
         for operation in operations.values():
-            is_legacy = not (path.startswith("/api/v1/") or path in ("/health", "/.well-known/jwks.json"))
-            assert operation.get("deprecated", False) is is_legacy, path
+            assert operation.get("deprecated", False) is False, path

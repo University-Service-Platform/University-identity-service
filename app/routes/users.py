@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.demo_accounts import ensure_not_protected_demo_account
 from app.integrations.directory_client import DirectoryClient, get_directory_client
 from app.services.profile_access_service import ProfileAccessService
 from app.services.user_management_service import UserManagementService
@@ -99,6 +100,7 @@ def update_own_profile(
         )
     name = profile_in.full_name()
     if name:
+        ensure_not_protected_demo_account(current_user.id)
         UserManagementService(db).update_user(current_user.id, UserUpdate(name=name))
         AuditService(db).record(current_user.id, audit_service.USER_UPDATED, "USER", current_user.id,
                                 {"changed_fields": ["name"], "self_service": True})
@@ -138,6 +140,7 @@ def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
+    ensure_not_protected_demo_account(user_id)
     service = UserManagementService(db)
     updated_user = service.update_user(user_id=user_id, user_update=user_update)
     AuditService(db).record(
@@ -159,6 +162,7 @@ def update_user_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
+    ensure_not_protected_demo_account(user_id)
     service = UserManagementService(db)
     updated_user = service.update_user_status(user_id=user_id, new_status=status_in.status)
     AuditService(db).record(
@@ -178,6 +182,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(RoleChecker(["ADMIN"]))
 ):
+    ensure_not_protected_demo_account(user_id)
     service = UserManagementService(db)
     deleted = service.delete_user(user_id=user_id)
     AuditService(db).record(

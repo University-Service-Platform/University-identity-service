@@ -68,6 +68,7 @@ python scripts/generate_jwt_keys.py   # optional in development, required in pro
 | `ROOT_PATH` | *(empty)* | Prefix the API Gateway strips, e.g. `/identity`, so Swagger UI and deprecation links work behind the gateway |
 | `DEMO_USER_PASSWORD` | *(empty)* | Password given to seeded demo users |
 | `SEED_DEMO_DATA` | `false` | Container only: seed demo users on start |
+| `PROTECT_DEMO_USERS` | `true` | Refuse API changes to the 11 shared demo accounts (403 `DEMO_ACCOUNT_PROTECTED`), so one tester can't break everyone's logins. Set `false` to allow them |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## 5. Database setup and migrations

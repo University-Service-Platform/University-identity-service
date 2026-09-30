@@ -72,6 +72,8 @@ class Settings:
     # Path prefix the API Gateway strips before forwarding (e.g. "/identity"), so Swagger UI
     # and OpenAPI links work behind the gateway; empty when the service is called directly
     root_path: str = ""
+    # Refuse API changes to the shared seeded demo accounts (see app/demo_accounts.py)
+    protect_demo_users: bool = True
 
     @property
     def is_production(self) -> bool:
@@ -126,6 +128,7 @@ def get_settings() -> Settings:
         directory_service_timeout_seconds=_env_float("DIRECTORY_SERVICE_TIMEOUT_SECONDS", 3.0),
         cors_allowed_origins=_env_list("CORS_ALLOWED_ORIGINS"),
         root_path=_env("ROOT_PATH", ""),
+        protect_demo_users=_env("PROTECT_DEMO_USERS", "true").strip().lower() not in ("false", "0", "no"),
     )
     settings.validate()
     return settings

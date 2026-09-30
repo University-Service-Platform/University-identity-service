@@ -45,9 +45,10 @@ for v1_router in (auth_router, users_router, roles_router, role_catalogue_router
     app.include_router(v1_router, prefix=API_V1_PREFIX)
 
 # Sprint 1 unversioned routes, kept as deprecated aliases so existing consumers keep working.
-# Responses carry "Deprecation: true" and a Link header pointing at the successor.
+# Responses carry "Deprecation: true" and a Link header pointing at the successor. They are left
+# out of the OpenAPI docs so Swagger shows only the /api/v1 contract the gateway routes.
 for legacy_router in (users_router, roles_router, legacy_validation_router):
-    app.include_router(legacy_router, deprecated=True, tags=[LEGACY_TAG],
+    app.include_router(legacy_router, deprecated=True, tags=[LEGACY_TAG], include_in_schema=False,
                        dependencies=[Depends(legacy_route())])
-app.include_router(protected_example_router, deprecated=True, tags=[LEGACY_TAG],
+app.include_router(protected_example_router, deprecated=True, tags=[LEGACY_TAG], include_in_schema=False,
                    dependencies=[Depends(legacy_route(f"{API_V1_PREFIX}/auth/me"))])

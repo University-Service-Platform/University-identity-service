@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import jwks
 from app.database import get_db
+from app.demo_accounts import ensure_not_protected_demo_account
 from app.dependencies.auth import require_active_account, require_permission
 from app.models.user import User
 from app.schemas.auth import (
@@ -66,6 +67,7 @@ def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_active_account)
 ):
+    ensure_not_protected_demo_account(current_user.id)
     AuthService(db).change_password(current_user, body.current_password, body.new_password)
     AuditService(db).record(current_user.id, audit_service.PASSWORD_CHANGED, "USER", current_user.id)
     return MessageResponse(success=True, data=MessageData(message="Password changed successfully."))
@@ -84,6 +86,7 @@ def set_user_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("users:manage"))
 ):
+    ensure_not_protected_demo_account(user_id)
     target = UserManagementService(db).set_password(user_id, body.new_password)
     AuditService(db).record(current_user.id, audit_service.PASSWORD_SET, "USER", target.id)
     return MessageResponse(success=True, data=MessageData(message=f"Password for user '{user_id}' was set."))
